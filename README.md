@@ -44,9 +44,6 @@
 - [Customers](#customers)
 - [Supported compilers](#supported-compilers)
 - [Integration](#integration)
-  - [CMake](#cmake)
-  - [Package Managers](#package-managers)
-  - [Pkg-config](#pkg-config)
 - [License](#license)
 - [Contact](#contact)
 - [Thanks](#thanks)
@@ -60,7 +57,7 @@ There are myriads of [JSON](https://json.org) libraries out there, and each may 
 
 - **Intuitive syntax**. In languages such as Python, JSON feels like a first-class data type. We used all the operator magic of modern C++ to achieve the same feeling in your code. Check out the [examples below](#examples) and you'll know what I mean.
 
-- **Trivial integration**. Our whole code consists of a single header file [`json.hpp`](https://github.com/nlohmann/json/blob/develop/single_include/nlohmann/json.hpp). That's it. No library, no subproject, no dependencies, no complex build system. The class is written in vanilla C++11. All in all, everything should require no adjustment of your compiler flags or project settings. The library is also included in all popular [package managers](https://json.nlohmann.me/integration/package_managers/).
+- **Trivial integration**. Our whole code consists of a single header file [`json.hpp`](include/nlohmann/json.hpp). That's it. No library, no subproject, no dependencies, no complex build system. The class is written in vanilla C++11. All in all, everything should require no adjustment of your compiler flags or project settings.
 
 - **Serious testing**. Our code is heavily [unit-tested](https://github.com/nlohmann/json/tree/develop/tests/src) and covers [100%](https://coveralls.io/r/nlohmann/json) of the code, including all exceptional behavior. Furthermore, we checked with [Valgrind](https://valgrind.org) and the [Clang Sanitizers](https://clang.llvm.org/docs/index.html) that there are no memory leaks. [Google OSS-Fuzz](https://github.com/google/oss-fuzz/tree/master/projects/json) additionally runs fuzz tests against all parsers 24/7, effectively executing billions of tests so far. To maintain high quality, the project is following the [Core Infrastructure Initiative (CII) best practices](https://bestpractices.coreinfrastructure.org/projects/289). See the [quality assurance](https://json.nlohmann.me/community/quality_assurance) overview documentation.
 
@@ -730,7 +727,7 @@ Supported types can be implicitly converted to JSON values.
 
 It is recommended to **NOT USE** implicit conversions **FROM** a JSON value.
 You can find more details about this recommendation [here](https://www.github.com/nlohmann/json/issues/958).
-You can switch off implicit conversions by defining `JSON_USE_IMPLICIT_CONVERSIONS` to `0` before including the `json.hpp` header. When using CMake, you can also achieve this by setting the option `JSON_ImplicitConversions` to `OFF`.
+You can switch off implicit conversions by defining `JSON_USE_IMPLICIT_CONVERSIONS` to `0` before including the `json.hpp` header.
 
 ```cpp
 // strings
@@ -1222,7 +1219,14 @@ See the page [quality assurance](https://json.nlohmann.me/community/quality_assu
 
 ## Integration
 
-[`json.hpp`](https://github.com/nlohmann/json/blob/develop/single_include/nlohmann/json.hpp) is the single required file in `single_include/nlohmann` or [released here](https://github.com/nlohmann/json/releases). You need to add
+This package follows [Deft](https://github.com/deft-cli/deft)'s strict layout: headers live under [`include/nlohmann/`](include/nlohmann), with [`include/nlohmann/json.hpp`](include/nlohmann/json.hpp) as the single header consumers need, and [`include/nlohmann/json_fwd.hpp`](include/nlohmann/json_fwd.hpp) available for forward-declarations. Add it to your `deft.toml`:
+
+```toml
+[dependencies]
+"gh:nlohmann/json" = "3.12.0"
+```
+
+and include it where you need to process JSON:
 
 ```cpp
 #include <nlohmann/json.hpp>
@@ -1231,134 +1235,7 @@ See the page [quality assurance](https://json.nlohmann.me/community/quality_assu
 using json = nlohmann::json;
 ```
 
-to the files you want to process JSON and set the necessary switches to enable C++11 (e.g., `-std=c++11` for GCC and Clang).
-
-You can further use file [`include/nlohmann/json_fwd.hpp`](https://github.com/nlohmann/json/blob/develop/include/nlohmann/json_fwd.hpp) for forward-declarations. The installation of `json_fwd.hpp` (as part of cmake's install step) can be achieved by setting `-DJSON_MultipleHeaders=ON`.
-
-### CMake
-
-You can also use the `nlohmann_json::nlohmann_json` interface target in CMake.  This target populates the appropriate usage requirements for `INTERFACE_INCLUDE_DIRECTORIES` to point to the appropriate include directories and `INTERFACE_COMPILE_FEATURES` for the necessary C++11 flags.
-
-#### External
-
-To use this library from a CMake project, you can locate it directly with `find_package()` and use the namespaced imported target from the generated package configuration:
-
-```cmake
-# CMakeLists.txt
-find_package(nlohmann_json 3.12.0 REQUIRED)
-...
-add_library(foo ...)
-...
-target_link_libraries(foo PRIVATE nlohmann_json::nlohmann_json)
-```
-
-The package configuration file, `nlohmann_jsonConfig.cmake`, can be used either from an install tree or directly out of the build tree.
-
-#### Embedded
-
-To embed the library directly into an existing CMake project, place the entire source tree in a subdirectory and call `add_subdirectory()` in your `CMakeLists.txt` file:
-
-```cmake
-# Typically you don't care so much for a third party library's tests to be
-# run from your own project's code.
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-
-# If you only include this third party in PRIVATE source files, you do not
-# need to install it when your main project gets installed.
-# set(JSON_Install OFF CACHE INTERNAL "")
-
-# Don't use include(nlohmann_json/CMakeLists.txt) since that carries with it
-# unintended consequences that will break the build.  It's generally
-# discouraged (although not necessarily well documented as such) to use
-# include(...) for pulling in other CMake projects anyways.
-add_subdirectory(nlohmann_json)
-...
-add_library(foo ...)
-...
-target_link_libraries(foo PRIVATE nlohmann_json::nlohmann_json)
-```
-
-##### Embedded (FetchContent)
-
-Since CMake v3.11,
-[FetchContent](https://cmake.org/cmake/help/v3.11/module/FetchContent.html) can
-be used to automatically download a release as a dependency at configure time.
-
-Example:
-
-```cmake
-include(FetchContent)
-
-FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
-FetchContent_MakeAvailable(json)
-
-target_link_libraries(foo PRIVATE nlohmann_json::nlohmann_json)
-```
-
-**Note**: It is recommended to use the URL approach described above, which is supported as of version 3.10.0. See
-<https://json.nlohmann.me/integration/cmake/#fetchcontent> for more information.
-
-#### Supporting Both
-
-To allow your project to support either an externally supplied or an embedded JSON library, you can use a pattern akin to the following:
-
-``` cmake
-# Top level CMakeLists.txt
-project(FOO)
-...
-option(FOO_USE_EXTERNAL_JSON "Use an external JSON library" OFF)
-...
-add_subdirectory(thirdparty)
-...
-add_library(foo ...)
-...
-# Note that the namespaced target will always be available regardless of the
-# import method
-target_link_libraries(foo PRIVATE nlohmann_json::nlohmann_json)
-```
-
-```cmake
-# thirdparty/CMakeLists.txt
-...
-if(FOO_USE_EXTERNAL_JSON)
-  find_package(nlohmann_json 3.12.0 REQUIRED)
-else()
-  set(JSON_BuildTests OFF CACHE INTERNAL "")
-  add_subdirectory(nlohmann_json)
-endif()
-...
-```
-
-`thirdparty/nlohmann_json` is then a complete copy of this source tree.
-
-### Package Managers
-
-Use your favorite [**package manager**](https://json.nlohmann.me/integration/package_managers/) to use the library.
-
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/homebrew.svg" height="20">&nbsp;[**Homebrew**](https://json.nlohmann.me/integration/package_managers/#homebrew) `nlohmann-json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/meson.svg" height="20">&nbsp;[**Meson**](https://json.nlohmann.me/integration/package_managers/#meson) `nlohmann_json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/bazel.svg" height="20">&nbsp;[**Bazel**](https://json.nlohmann.me/integration/package_managers/#bazel) `nlohmann_json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/conan.svg" height="20">&nbsp;[**Conan**](https://json.nlohmann.me/integration/package_managers/#conan) `nlohmann_json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/spack.svg" height="20">&nbsp;[**Spack**](https://json.nlohmann.me/integration/package_managers/#spack) `nlohmann-json`
-- [**Hunter**](https://json.nlohmann.me/integration/package_managers/#hunter) `nlohmann_json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/vcpkg.png" height="20">&nbsp;[**vcpkg**](https://json.nlohmann.me/integration/package_managers/#vcpkg) `nlohmann-json`
-- [**cget**](https://json.nlohmann.me/integration/package_managers/#cget) `nlohmann/json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/swift.svg" height="20">&nbsp;[**Swift Package Manager**](https://json.nlohmann.me/integration/package_managers/#swift-package-manager) `nlohmann/json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/nuget.svg" height="20">&nbsp;[**Nuget**](https://json.nlohmann.me/integration/package_managers/#nuget) `nlohmann.json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/conda.svg" height="20">&nbsp;[**Conda**](https://json.nlohmann.me/integration/package_managers/#conda) `nlohmann_json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/macports.svg" height="20">&nbsp;[**MacPorts**](https://json.nlohmann.me/integration/package_managers/#macports) `nlohmann-json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/CPM.png" height="20">&nbsp;[**cpm.cmake**](https://json.nlohmann.me/integration/package_managers/#cpmcmake) `gh:nlohmann/json`
-- <img src="https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/docs/mkdocs/docs/images/package_managers/xmake.svg" height="20">&nbsp;[**xmake**](https://json.nlohmann.me/integration/package_managers/#xmake) `nlohmann_json`
-
-The library is part of many package managers. See the [**documentation**](https://json.nlohmann.me/integration/package_managers/) for detailed descriptions and examples.
-
-### Pkg-config
-
-If you are using bare Makefiles, you can use `pkg-config` to generate the include flags that point to where the library is installed:
-
-```sh
-pkg-config nlohmann_json --cflags
-```
+`deft build` resolves the dependency, compiles `src/lib.cpp` (the header-only library's anchor translation unit) into a static archive, and exposes `include/` to dependents automatically — no separate configure step.
 
 ## License
 
@@ -1795,29 +1672,9 @@ Thanks a lot for helping out! Please [let me know](mailto:mail@nlohmann.me) if I
 
 ## Used third-party tools
 
-The library itself consists of a single header file licensed under the MIT license. However, it is built, tested, documented, and whatnot using a lot of third-party tools and services. Thanks a lot!
+The library itself consists of a single header file licensed under the MIT license. Within this Deft package, the only bundled third-party code is:
 
-- [**amalgamate.py - Amalgamate C source and header files**](https://github.com/edlund/amalgamate) to create a single header file
-- [**American fuzzy lop**](https://lcamtuf.coredump.cx/afl/) for fuzz testing
-- [**AppVeyor**](https://www.appveyor.com) for [continuous integration](https://ci.appveyor.com/project/nlohmann/json) on Windows
-- [**Artistic Style**](http://astyle.sourceforge.net) for automatic source code indentation
-- [**Clang**](https://clang.llvm.org) for compilation with code sanitizers
-- [**CMake**](https://cmake.org) for build automation
-- [**Codacy**](https://www.codacy.com) for further [code analysis](https://app.codacy.com/gh/nlohmann/json/dashboard)
-- [**Coveralls**](https://coveralls.io) to measure [code coverage](https://coveralls.io/github/nlohmann/json)
-- [**Coverity Scan**](https://scan.coverity.com) for [static analysis](https://scan.coverity.com/projects/nlohmann-json)
-- [**cppcheck**](http://cppcheck.sourceforge.net) for static analysis
-- [**doctest**](https://github.com/onqtam/doctest) for the unit tests
-- [**GitHub Changelog Generator**](https://github.com/skywinder/github-changelog-generator) to generate the [ChangeLog](https://github.com/nlohmann/json/blob/develop/ChangeLog.md)
-- [**Google Benchmark**](https://github.com/google/benchmark) to implement the benchmarks
-- [**Hedley**](https://nemequ.github.io/hedley/) to avoid re-inventing several compiler-agnostic feature macros
-- [**lcov**](https://github.com/linux-test-project/lcov) to process coverage information and create an HTML view
-- [**libFuzzer**](https://llvm.org/docs/LibFuzzer.html) to implement fuzz testing for OSS-Fuzz
-- [**Material for MkDocs**](https://squidfunk.github.io/mkdocs-material/) for the style of the documentation site
-- [**MkDocs**](https://www.mkdocs.org) for the documentation site
-- [**OSS-Fuzz**](https://github.com/google/oss-fuzz) for continuous fuzz testing of the library ([project repository](https://github.com/google/oss-fuzz/tree/master/projects/json))
-- [**Probot**](https://probot.github.io) for automating maintainer tasks such as closing stale issues, requesting missing information, or detecting toxic comments.
-- [**Valgrind**](https://valgrind.org) to check for correct memory management
+- [**Hedley**](https://nemequ.github.io/hedley/) (`include/nlohmann/thirdparty/hedley`) to avoid re-inventing several compiler-agnostic feature macros
 
 ## Notes
 
@@ -1885,40 +1742,4 @@ Here is a related issue [#1924](https://github.com/nlohmann/json/issues/1924).
 
 ## Execute unit tests
 
-To compile and run the tests, you need to execute
-
-```shell
-mkdir build
-cd build
-cmake .. -DJSON_BuildTests=On
-cmake --build .
-ctest --output-on-failure
-```
-
-Note that during the `ctest` stage, several JSON test files are downloaded from an [external repository](https://github.com/nlohmann/json_test_data). If policies forbid downloading artifacts during testing, you can download the files yourself and pass the directory with the test files via `-DJSON_TestDataDirectory=path` to CMake. Then, no Internet connectivity is required. See [issue #2189](https://github.com/nlohmann/json/issues/2189) for more information.
-
-If the testdata is not found, several test suites will fail like this:
-
-```
-===============================================================================
-json/tests/src/make_test_data_available.hpp:21:
-TEST CASE:  check test suite is downloaded
-
-json/tests/src/make_test_data_available.hpp:23: FATAL ERROR: REQUIRE( utils::check_testsuite_downloaded() ) is NOT correct!
-  values: REQUIRE( false )
-  logged: Test data not found in 'json/cmake-build-debug/json_test_data'.
-          Please execute target 'download_test_data' before running this test suite.
-          See <https://github.com/nlohmann/json#execute-unit-tests> for more information.
-
-===============================================================================
-```
-
-In case you have downloaded the library rather than checked out the code via Git, test `cmake_fetch_content_configure` will fail. Please execute `ctest -LE git_required` to skip these tests. See [issue #2189](https://github.com/nlohmann/json/issues/2189) for more information.
-
-Some tests are requiring network to be properly execute. They are labeled as `git_required`. Please execute `ctest -LE git_required` to skip these tests. See [issue #4851](https://github.com/nlohmann/json/issues/4851) for more information.
-
-Some tests change the installed files and hence make the whole process not reproducible. Please execute `ctest -LE not_reproducible` to skip these tests. See [issue #2324](https://github.com/nlohmann/json/issues/2324) for more information. Furthermore, assertions must be switched off to ensure reproducible builds (see [discussion 4494](https://github.com/nlohmann/json/discussions/4494)).
-
-Note you need to call `cmake -LE "not_reproducible|git_required"` to exclude both labels. See [issue #2596](https://github.com/nlohmann/json/issues/2596) for more information.
-
-As Intel compilers use unsafe floating point optimization by default, the unit tests may fail. Use flag [`/fp:precise`](https://www.intel.com/content/www/us/en/docs/cpp-compiler/developer-guide-reference/2021-8/fp-model-fp.html) then.
+This package's upstream unit test suite (CMake/doctest-based) was removed as part of the Deft port, since Deft v0.3.0 has no test-orchestration concept of its own. The full historical test suite remains available in the upstream [nlohmann/json](https://github.com/nlohmann/json) repository.
