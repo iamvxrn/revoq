@@ -76,6 +76,10 @@ pub enum Command {
     /// dependencies entirely from those local copies — no git, no network,
     /// no global cache lookups.
     Vendor(VendorArgs),
+
+    /// Run Clang's static analyzer over the package's sources without
+    /// compiling to an object file or invoking the linker.
+    Check(CheckArgs),
 }
 
 /// Arguments shared by `build` and (transitively) `run`.
@@ -104,6 +108,49 @@ pub struct BuildArgs {
     /// Do not activate the `default` feature set.
     #[arg(long)]
     pub no_default_features: bool,
+
+    /// Profile compilation with Clang's `-ftime-trace` and aggregate the
+    /// result into `target/<profile>/deft_profile.json` (loadable at
+    /// chrome://tracing or speedscope.app), printing the slowest headers
+    /// and template instantiations to the terminal.
+    #[arg(long)]
+    pub trace: bool,
+
+    /// Cross-compile for a different target triple (e.g.
+    /// `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`), passed to clang
+    /// as `--target=<triple>` during both compilation and linking. Overrides
+    /// the `[package] target` manifest field when both are set.
+    #[arg(long, value_name = "TRIPLE")]
+    pub target: Option<String>,
+}
+
+/// Arguments for `deft check`.
+///
+/// Deliberately a smaller surface than `BuildArgs`: `deft check` never
+/// produces an artifact, so `--release`/`-o`/`--trace` don't apply.
+#[derive(clap::Args, Debug)]
+pub struct CheckArgs {
+    /// Path to the project root (defaults to the current directory).
+    #[arg(long, value_name = "DIR")]
+    pub manifest_path: Option<PathBuf>,
+
+    /// Number of parallel analysis jobs. Defaults to the number of CPUs.
+    #[arg(short = 'j', long = "jobs", value_name = "N")]
+    pub jobs: Option<usize>,
+
+    /// Comma-separated list of features to activate.
+    #[arg(long, value_name = "FEATURES", value_delimiter = ',')]
+    pub features: Vec<String>,
+
+    /// Do not activate the `default` feature set.
+    #[arg(long)]
+    pub no_default_features: bool,
+
+    /// Analyze as if cross-compiling for this target triple, passed to
+    /// clang as `--target=<triple>`. Overrides the `[package] target`
+    /// manifest field when both are set.
+    #[arg(long, value_name = "TRIPLE")]
+    pub target: Option<String>,
 }
 
 /// Arguments for `deft run`.
@@ -244,6 +291,54 @@ mod tests {
 
         let after = Cli::try_parse_from(["deft", "doctor", "--json"]).unwrap();
         assert!(after.json);
+    }
+
+    #[test]
+    fn build_target_flag_defaults_to_none_and_parses_when_given() {
+        let cli = Cli::try_parse_from(["deft", "build"]).unwrap();
+        match cli.command {
+            Command::Build(args) => assert_eq!(args.target, None),
+            other => panic!("expected Command::Build, got {other:?}"),
+        }
+
+        let cli =
+            Cli::try_parse_from(["deft", "build", "--target", "aarch64-unknown-linux-gnu"])
+                .unwrap();
+        match cli.command {
+            Command::Build(args) => {
+                assert_eq!(args.target.as_deref(), Some("aarch64-unknown-linux-gnu"))
+            }
+            other => panic!("expected Command::Build, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn check_parses_as_its_own_command_with_build_like_flags() {
+        let cli = Cli::try_parse_from(["deft", "check"]).unwrap();
+        match cli.command {
+            Command::Check(args) => {
+                assert_eq!(args.target, None);
+                assert!(!args.no_default_features);
+            }
+            other => panic!("expected Command::Check, got {other:?}"),
+        }
+
+        let cli = Cli::try_parse_from([
+            "deft",
+            "check",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--features",
+            "a,b",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Check(args) => {
+                assert_eq!(args.target.as_deref(), Some("wasm32-unknown-unknown"));
+                assert_eq!(args.features, vec!["a".to_string(), "b".to_string()]);
+            }
+            other => panic!("expected Command::Check, got {other:?}"),
+        }
     }
 
     #[test]
