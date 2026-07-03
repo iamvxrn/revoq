@@ -27,5 +27,5 @@ menu:
       weight: 4
 
 params:
-  description: "Next-gen build system for C/C++"
+  description: "A modern build system for C/C++ "
   tagline: "Build faster. Ship cleaner."
