@@ -66,17 +66,19 @@ there is no global/thread-local state.
 
 ```
 deft build [--release] [-o NAME] [-j N] [--manifest-path DIR]
-            [--features A,B,C] [--no-default-features]
+            [--features A,B,C] [--no-default-features] [--trace] [--target TRIPLE]
 ```
 
 | Flag | Mechanics |
 |---|---|
 | `--release` | Boolean. Passed through to `Compiler::new(..., release)` and `Engine::build_package(..., release)`. Two concrete effects: (1) `Compiler::effective_opt` **unconditionally returns `OptLevel::O3`**, ignoring whatever `optimization` string is set in `[profile.c]`/`[profile.cpp]` — release always means `-O3`, full stop, regardless of manifest config; (2) `push_common` appends `-DNDEBUG` and omits `-g`. Debug builds (`release = false`) do the opposite: honor the manifest's `optimization` field via `OptLevel::parse`, and always append `-g`. |
 | `-o`, `--output NAME` | `Option<String>`. Overrides the artifact's base filename (before the platform-specific extension is applied: `.exe`/bare on Unix for executables, `.lib`/`lib*.a` for libraries). Defaults to the package name. |
-| `-j`, `--jobs N` | `Option<usize>`. Resolved by the `jobs()` helper in [main.rs](../src/main.rs): `args.jobs.unwrap_or_else(default_jobs).max(1)`. This is the **clamping**: an explicit `-j` is floored to a minimum of `1` (so `-j 0` cannot spawn zero workers), and an absent `-j` falls back to `std::thread::available_parallelism()`. `Engine::new` applies a second floor (`jobs.max(1)`) and `compile_all` further clamps the *actual* worker count to `self.jobs.min(total)` — never more threads spawned than there are translation units to compile. |
+| `-j`, `--jobs N` | `Option<usize>`. Resolved by `resolve_jobs()` in [main.rs](../src/main.rs) (shared with `deft check`): `explicit.unwrap_or_else(default_jobs).max(1)`. This is the **clamping**: an explicit `-j` is floored to a minimum of `1` (so `-j 0` cannot spawn zero workers), and an absent `-j` falls back to `std::thread::available_parallelism()`. `Engine::new` applies a second floor (`jobs.max(1)`) and `compile_all`/`check_package` further clamp the *actual* worker count to `self.jobs.min(total)` — never more threads spawned than there are translation units to process. |
 | `--manifest-path DIR` | `Option<PathBuf>`. May point at a directory or directly at a `deft.toml` file (`project_root` strips the filename in the latter case). Defaults to the current working directory. Resolution fails fast with `LayoutViolation` if no `deft.toml` is found at the resolved root. |
 | `--features A,B,C` | `Vec<String>`, comma-delimited (`value_delimiter = ','`). Unioned with the manifest's `default` feature set (unless suppressed) and transitively expanded — see [manifest.md](manifest.md#feature-flag-resolution). |
 | `--no-default-features` | Boolean. Suppresses automatic inclusion of the `[features] default` set; explicitly-passed `--features` are still honored. |
+| `--trace` | Boolean. Threaded into both `Compiler::new(..., trace)` and `Engine::new(..., trace)`. See [Build profiling (`--trace`)](#build-profiling---trace) below. |
+| `--target TRIPLE` | `Option<String>`. Overrides `[package] target` when both are set. See [Cross-compilation (`--target`)](#cross-compilation---target) below. |
 
 **Toolchain pin.** If `[package] toolchain` is set (e.g. `"clang-18.1"`),
 `build_single` validates it — invoking the named compiler and checking its
@@ -133,6 +135,143 @@ logged. A successful fresh build populates that same cache entry afterward
 out of scope for this cache, since their output is project-specific rather
 than a reusable artifact. Hashing uses only `std::hash::Hasher`
 (`DefaultHasher`) — no extra crate.
+
+### Cross-compilation (`--target`)
+
+Clang is natively a cross-compiler — one clang binary can target any triple
+its built-in backends support, unlike GCC's traditional one-toolchain-per-target
+model. `--target`/`[package] target` exposes that directly, with no
+new toolchain-management machinery in deft itself.
+
+**Resolution.** `effective_target(cli_target, manifest)` in
+[main.rs](../src/main.rs) is the single place the two sources are reconciled:
+CLI wins if given, otherwise the manifest's `[package] target` (see
+[manifest.md](manifest.md#target--cross-compilation)), otherwise `None`
+(native build, zero-overhead — no `--target` flag reaches clang at all,
+matching pre-0.5.0 argument vectors byte-for-byte). `build_single` computes
+this once for the root package and threads the same resolved value into
+`build_dependencies` (see below) and into the root `Compiler`.
+
+**Flag injection.** `Compiler::push_diagnostics_and_includes` — the helper
+shared by every compile path, including `deft check`'s analysis pass —
+injects `--target=<triple>` right after the color-diagnostics flags, before
+any `-I`/`-D`. `Compiler::link_command` injects the identical flag into the
+executable link step. Library builds go through the archiver
+(`ar`/`llvm-ar`), which never sees `--target` at all — archiving doesn't
+invoke clang, so there's no target-agreement concern there (same reasoning
+already documented for `-fsanitize=`/`-flto`, see
+[manifest.md](manifest.md#sanitizers-and-lto--clang-sanitizer-support)).
+
+**Dependencies are forced onto the same target.** `build_dependencies`
+takes the root's already-resolved `cross_target: Option<&str>` and passes it
+to *every* dependency's `Compiler::new`, ignoring that dependency's own
+`[package] target` entirely. Linking object files compiled for two
+different architectures/ABIs into one artifact doesn't work, so the root
+package's effective target always wins — see
+[manifest.md](manifest.md#target--cross-compilation) for why this is a
+deliberate asymmetry with feature resolution (which does *not* propagate to
+dependencies).
+
+**Cache correctness.** Because target injection happens inside the same
+`push_diagnostics_and_includes` helper `cache_fingerprint` calls, a
+cross-compiled library's global-cache key (see [Global build
+cache](#deft-build) above) always differs from a native build of the same
+library — the two can never collide in `~/.deft/cache/prebuilt/`.
+
+**No triple validation.** deft does not maintain or check against a list of
+known-good triples; an unrecognized or unsupported one simply surfaces as a
+normal clang error (`unknown target triple '...'` or similar) the first time
+clang is actually invoked. This matches how `extra_flags` is handled
+elsewhere — a raw pass-through, not a validated closed set like
+`optimization` or `sanitizers`.
+
+### Compilation database (`compile_commands.json`)
+
+Every successful `deft build` writes a
+[clangd-compatible compilation database](https://clang.llvm.org/docs/JSONCompilationDatabase.html)
+to `<root>/compile_commands.json` — unconditionally, with no flag to opt in
+or out. The mechanics live in `Engine::build_package`
+([engine.rs](../src/engine.rs)) and `compdb.rs`:
+
+- **Entries are planned before the cache-hit check.** `build_package` builds
+  every `CompileUnit` (source, object path, full argument vector) *before*
+  checking the global build cache, purely by calling `compiler.compile_unit`
+  — no filesystem or process work. This means a library served entirely from
+  `~/.deft/cache/prebuilt/{hash}` (see [Global build
+  cache](#deft-build) above) still contributes accurate
+  `compile_commands.json` entries: the compile flags are fully determined by
+  the manifest and CLI args, independent of whether clang actually runs.
+- **One entry per translation unit**, matching the schema field-for-field:
+  `directory` (the deft process's own `cwd`, via `std::env::current_dir()` —
+  every clang invocation inherits it, since deft never calls
+  `Command::current_dir`), `file` (the source path exactly as passed to
+  clang), and `arguments` (`clang`/`clang++` followed by every flag
+  `compile_unit` generated — standard, optimization, warnings, `-I`s,
+  defines, `-g`/`-DNDEBUG`, then `-o <object>` and the source path last).
+- **Aggregation scope.** `main.rs` collects entries from the root package
+  *and* every resolved dependency built in the same invocation
+  (`build_dependencies` now returns `(includes, cache_hits,
+  compile_commands)`), and `build_workspace` merges every member's entries
+  into one combined set before `cmd_build` writes the file. A workspace or a
+  package with dependencies still gets exactly one
+  `compile_commands.json` at the project root.
+- **Rendering.** `compdb::write` serializes with `Json::render_pretty()` (2-space
+  indent) rather than the compact `render()` used for `--json` payloads —
+  this file is meant to be read and diffed by humans as well as tools.
+- Written by `cmd_build` after `build_single`/`build_workspace` returns
+  successfully, via `compdb::write(&root, &outcome.compile_commands)?` — a
+  write failure (e.g. an unwritable project root) propagates as a normal
+  `DeftError`, same as any other artifact write in deft.
+
+### Build profiling (`--trace`)
+
+`--trace` turns on Clang's [`-ftime-trace`](https://clang.llvm.org/docs/UsersManual.html#profiling-clang)
+frontend/backend profiler and has deft make sense of its output. Two pieces,
+both new in v0.5.0:
+
+1. **Flag injection** (`compiler.rs`). `Compiler::new` takes a `trace: bool`
+   parameter; when set, `push_common` appends `-ftime-trace` to every
+   compile — for both C and C++, since the flag is common to both. This
+   deliberately runs through `push_common`, the same function
+   `cache_fingerprint` calls, so a `--trace` build's cache key differs from a
+   non-`--trace` build of the same library: they never collide in
+   `~/.deft/cache/prebuilt/`, and a stale cache hit can never silently
+   suppress trace output. Dependencies are always built with `trace: false`
+   — `--trace` profiles the package you're actively building, not its
+   (already-stable) dependencies.
+2. **Aggregation and reporting** (`trace.rs`, invoked from
+   `Engine::build_package` immediately after `compile_all` succeeds, only
+   when `Engine`'s own `trace` field is set). Clang writes `-ftime-trace`'s
+   output next to each object file, reusing its basename with a `.json`
+   extension — deft relies on that convention (via `-o`) rather than passing
+   `-ftime-trace=<path>` explicitly. `trace::aggregate_and_report`:
+   - Scans the package's `obj_dir` for `*.json` files.
+   - Parses each with `Json::parse` (see [Zero-dependency
+     footprint](architecture.md#philosophy) — this is the same hand-rolled
+     `Json` enum used for `--json` output and `compile_commands.json`,
+     extended with a read path).
+   - Merges every file's `traceEvents` array into one, injecting a synthetic
+     `process_name` metadata event (`ph: "M"`) per source file so
+     chrome://tracing / speedscope group each translation unit onto its own
+     track instead of colliding pid/tid values.
+   - Writes the merged document to
+     `target/<debug|release>/deft_profile.json` — standard [Chrome Trace
+     Event Format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU),
+     loadable directly at `chrome://tracing` or
+     [speedscope.app](https://www.speedscope.app).
+   - Deletes the original per-unit `.json` files — they're now redundant.
+   - Unless `--quiet`, prints the top 10 duration events **that carry an
+     `args.detail` field** (a header path, a template instantiation's
+     symbol, ...) sorted descending by duration. This filter is deliberate:
+     it excludes umbrella events like `ExecuteCompiler`/`Frontend`/`Backend`
+     that just sum up everything beneath them and would otherwise dominate a
+     naive top-N-by-duration ranking without pointing at anything
+     actionable.
+   - Every step is best-effort: a missing `obj_dir`, an unreadable or
+     malformed trace file, or a failed write is silently skipped rather than
+     failing the build — profiling is a diagnostic aid, not a build
+     correctness concern, so `aggregate_and_report` has no `Result` return
+     type at all.
 
 ### `deft run`
 
@@ -395,6 +534,80 @@ resolution](#deft-build) above), with no `git`, no network, and no global
 4. Non-quiet output prints one `Vendored <name> vVERSION -> <path>` line per
    dependency, then a `Finished vendoring N dependenc{y,ies}` summary.
 
+### `deft check`
+
+```
+deft check [--manifest-path DIR] [-j N] [--features A,B,C]
+           [--no-default-features] [--target TRIPLE]
+```
+
+Runs Clang's static analyzer (`--analyze`) over the package's own sources —
+no object files, no linker invocation, no artifact. `CheckArgs`
+([cli.rs](../src/cli.rs)) is deliberately a smaller surface than
+`BuildArgs`: there is no `--release` (analysis never reaches codegen, so
+optimization level is irrelevant), no `-o` (nothing is produced to name),
+and no `--trace` (nothing is compiled to profile).
+
+**Dependency handling.** `cmd_check` ([main.rs](../src/main.rs)) resolves
+dependencies exactly like `deft build` does — respecting a populated
+`third_party/` the same way (see [Offline/vendored dependency
+resolution](#deft-build) above) — but only to expose their `src/`/`include/`
+directories on the include path via `-I`. Dependencies are never compiled,
+analyzed, or even type-checked by `deft check`; it audits the package you're
+actively working on, not its already-vetted dependencies.
+
+**Argument construction.** `Compiler::analyze_unit` ([compiler.rs](../src/compiler.rs))
+builds a `--analyze` invocation per translation unit, reusing the existing
+`CompileUnit` struct purely for its `language`/`source`/`args` fields (its
+`object` field is an unused empty `PathBuf` — analysis never produces one,
+and nothing downstream reads it: `run_compile` in [engine.rs](../src/engine.rs),
+reused verbatim for both `deft build` and `deft check`, never touches
+`unit.object`). The argument vector is deliberately smaller than a real
+compile's:
+
+| Kept | Dropped |
+|---|---|
+| `--analyze` (replaces `-c` + `-o <obj>`) | optimization level (`-O*`) |
+| `-std=<standard>` | `-flto` |
+| profile `warnings` (`-Wall`, `-Wextra`, ...) | `sanitizers` (`-fsanitize=...`) |
+| `-frtti`/`-fno-rtti`, `-fexceptions`/`-fno-exceptions` (C++ only) | `-g`, `-DNDEBUG` |
+| `-I` include paths, `-D` defines, `--target=<triple>` | `-ftime-trace` |
+| | profile `extra_flags` |
+
+The kept/dropped split is exactly "what the analyzer needs to parse the
+translation unit the same way a real build would" (language dialect,
+warnings, headers, target) versus "what only matters for the codegen that
+`--analyze` never performs." Both the kept and dropped sets come from
+`push_diagnostics_and_includes`, the same helper a real compile's
+`push_common` calls — see [Cross-compilation](#cross-compilation---target)
+above for why `--target` is in the shared, not the compile-only, half.
+
+**Execution and failure semantics.** `Engine::check_package`
+([engine.rs](../src/engine.rs)) runs every unit across the same
+`std::thread` + `Mutex<VecDeque>` + `mpsc` work-queue shape as
+`compile_all` ([architecture.md](architecture.md#parallel-compilation-engine)),
+but with two deliberate differences:
+
+- **Every unit's diagnostics are printed, regardless of severity or
+  success.** `compile_all`'s `report_unit` only echoes warnings on a
+  *successful* unit; `check_package` streams everything, because surfacing
+  analyzer findings is the entire point of the command.
+- **Only a non-zero clang exit counts as a failure.** Analyzer findings
+  (`warning: ...` diagnostics, e.g. `[deadcode.DeadStores]`,
+  `[core.NullDereference]`) on an otherwise-successful parse are printed and
+  the command still exits `0` — the same "warnings don't fail the build"
+  contract `deft build` already has. A file clang couldn't even parse
+  (genuine syntax error, missing header, ...) does fail the command.
+
+A failure returns `DeftError::Analysis { failures }` — a variant distinct
+from `DeftError::Compilation` ([error.rs](../src/error.rs)) purely so the
+top-line message reads `check failed: N file(s) could not be analyzed`
+rather than the misleading `build failed: ...`, since `deft check` never
+builds anything. Unlike `Compilation`, it carries no structured
+`CompileDiagnostic` list — every diagnostic was already streamed to the
+terminal as it arrived, and (unlike `deft build --json`) `deft check` has no
+`--json` payload to feed from a stored copy.
+
 ### `--json` Output
 
 `--json` (declared `global = true` on `Cli`, see [Global
@@ -402,7 +615,12 @@ Constraints](#global-constraints)) replaces a command's human-readable
 output with one compact JSON object on stdout. Implemented by
 [json.rs](../src/json.rs) — a closed, dependency-free `Json` enum
 (`Null`/`Bool`/`Number`/`String`/`Array`/`Object`) with a `render()` method,
-rather than pulling in `serde_json`.
+rather than pulling in `serde_json`. Since v0.5.0 the same enum also has a
+`parse()` method (used to read Clang's `-ftime-trace` output — see [Build
+profiling](#build-profiling---trace) above) and a `render_pretty()` method
+(used for `compile_commands.json` — see [Compilation
+database](#compilation-database-compile_commandsjson) above); `--json`
+payloads on this page still use the original compact `render()`.
 
 **`deft build --json`.** `cmd_build_top_level` ([main.rs](../src/main.rs))
 times the whole build, forces `quiet`/`json` through to every internal
