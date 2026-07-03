@@ -36,6 +36,7 @@ version = "0.2.0"
 description = "optional"
 authors = ["optional", "list"]
 toolchain = "clang-18.1"   # optional
+target = "aarch64-unknown-linux-gnu"   # optional
 ```
 
 ```rust
@@ -45,6 +46,7 @@ pub struct Package {
     pub description: Option<String>,  // default: None
     pub authors: Vec<String>,         // default: []
     pub toolchain: Option<String>,    // default: None
+    pub target: Option<String>,       // default: None
 }
 ```
 
@@ -88,6 +90,50 @@ the separator dot (`"18.1."`), not just a string prefix.
 This check is strictly opt-in: a manifest with no `toolchain` field pays
 zero extra cost — `deft build`'s hot path is unaffected (see
 [architecture.md](architecture.md#hot-path-strategy)).
+
+### `target` — cross-compilation
+
+`target` is an optional cross-compilation target triple, e.g.
+`"aarch64-unknown-linux-gnu"` or `"wasm32-unknown-unknown"`. Unlike
+`toolchain`, it's a raw, unvalidated string: deft passes it straight through
+as `--target=<triple>` and lets clang itself reject an unrecognized or
+unsupported triple, the same pass-through contract `extra_flags` already
+has. Validating a triple up front would mean either hardcoding a triple list
+(perpetually incomplete) or shelling out to `clang --print-targets` on every
+invocation — the latter conflicts with the hot-path guarantee (see
+[architecture.md](architecture.md#hot-path-strategy)), so deft doesn't.
+
+`--target=<triple>` is injected into **both** phases that need to agree on
+architecture/ABI: every translation unit's compile command
+(`Compiler::push_diagnostics_and_includes`, shared with `deft check`'s
+analysis path) and the final executable link command
+(`Compiler::link_command`). It's deliberately *not* passed to the archiver —
+`ar`/`llvm-ar` bundle object files without inspecting their target, so
+library builds never see it there (the same reasoning that already excludes
+`-fsanitize=`/`-flto` from the archiver path, see
+[sanitizers and lto](#sanitizers-and-lto--clang-sanitizer-support) above).
+
+**Priority.** `deft build --target <triple>` (the CLI flag) always overrides
+this manifest field when both are set (`effective_target` in
+[main.rs](../src/main.rs)). Neither set means a fully native build — no
+`--target` flag reaches clang at all, byte-for-byte identical to a pre-0.5.0
+manifest.
+
+**Dependencies do not get their own vote.** Unlike feature resolution, where
+"a consuming package's `--features` selection does not yet propagate into
+its dependencies' builds" (see [Feature Flag
+Resolution](#feature-flag-resolution) below), the *effective* target
+(whichever of CLI/manifest won for the root package) is force-applied to
+every dependency's compile as well, overriding whatever that dependency's
+own `[package] target` might say. This is not an oversight — linking object
+files compiled for two different targets into one artifact simply doesn't
+work, so consistency has to win over a dependency's own preference.
+
+**Cache interaction.** `--target` is injected inside the same helper
+`Compiler::cache_fingerprint` calls, so a cross-compiled build's global-cache
+key (see [Global build cache](cli.md#deft-build)) is always distinct from a
+native build of the same library — the two can never collide and serve the
+wrong architecture's cached archive.
 
 ### `[workspace]`
 

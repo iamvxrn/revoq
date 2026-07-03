@@ -39,8 +39,12 @@ a tool the host OS or toolchain already provides:
   async-executor crate ([engine.rs](../src/engine.rs) `compile_all`).
 - Global build cache hashing: `std::hash::Hasher` (`DefaultHasher`), never a
   cryptographic-hash crate ([hash.rs](../src/hash.rs) `package_key`).
-- `--json` output: a closed, hand-written `Json` enum with its own
-  `render()`, never `serde_json` ([json.rs](../src/json.rs)).
+- `--json` output, `compile_commands.json`, and reading Clang's
+  `-ftime-trace` output: a closed, hand-written `Json` enum with its own
+  `render()`/`render_pretty()`/`parse()`, never `serde_json`
+  ([json.rs](../src/json.rs)). `parse()` is deliberately read-only and
+  scoped to the JSON documents deft actually needs to read back (Chrome
+  Trace Event Format) — it is not a general-purpose JSON library.
 
 This keeps the deft binary itself small and fast to build, and keeps deft's
 own supply chain trivially auditable.
@@ -300,3 +304,105 @@ The same archiver step also governs artifact naming
 `<name>.lib` on Windows, and object files use the `.o` extension on Unix
 versus `.obj` on Windows (`object_extension()`), matching each platform's
 archiver convention.
+
+## IDE and Profiling Artifacts
+
+Two v0.5.0 additions — `compile_commands.json` and `deft build --trace` —
+follow the same "derive it from what deft already computed, don't add a new
+source of truth" principle as everything else in this document.
+
+**`compile_commands.json` entries are a side effect of argument-vector
+construction, not a second code path.** `Engine::build_package` already
+calls `compiler.compile_unit(source, object)` once per translation unit to
+get the `CompileUnit` it hands to the compile thread-pool
+([Parallel Compilation Engine](#parallel-compilation-engine)). Since v0.5.0,
+that same call happens *before* the global-cache short-circuit, and its
+result is reused to build a `compdb::CompileCommandEntry` (`compdb.rs`) —
+`directory` (the deft process's own cwd), `file` (the unit's source path),
+`arguments` (`clang`/`clang++` prepended to the unit's argument vector
+verbatim). No flags are recomputed or guessed a second time; the compilation
+database is exactly what deft would run, because it's built from the same
+`Vec<String>` that either does or doesn't get handed to `Command::new`.
+
+**Every package built in one invocation contributes.** `main.rs` threads
+`Vec<CompileCommandEntry>` through the same aggregation points that already
+existed for `cache_hits` and include-path collection: `build_dependencies`
+returns it alongside `(includes, cache_hits)`, `build_single` appends the
+root package's own entries, and `build_workspace` merges every member's set
+before returning. `cmd_build` writes the merged result to the project root
+once, after the whole build (including all dependencies and workspace
+members) has succeeded — never per-package, so a project with N
+dependencies doesn't produce N competing files.
+
+**`-ftime-trace` reuses the cache fingerprint mechanism to stay correct.**
+`Compiler::push_common` — the same function that injects `-I`, `-D`, `-g`,
+and sanitizer flags into both `c_flags()` and `cpp_flags()` — also injects
+`-ftime-trace` when `Compiler`'s `trace` field is set. Because
+`cache_fingerprint()` (used by the global build cache, see [Parallel
+Compilation Engine](#parallel-compilation-engine) and
+[cli.md](cli.md#deft-build)) calls those same two functions, a `--trace`
+build's cache key is automatically distinct from a non-`--trace` build's.
+This isn't a special case bolted on for tracing — it falls out of the
+existing "the fingerprint is whatever flags actually reach clang" design,
+and is what prevents a cache hit from silently producing zero trace output
+for a library the user explicitly asked to profile.
+
+**Trace aggregation trusts Clang's own file-naming convention instead of
+tracking state.** `-ftime-trace` (bare, no `=<path>` argument) tells clang to
+write its profile next to the `-o` object path, reusing the object's
+basename with a `.json` extension. `object_path()` already gives every
+translation unit a unique, flattened basename (mirroring its path under
+`src/`, `/` replaced with `__`, so same-named files in different
+directories never collide — see [Cross-Platform Archiver Fallback
+Chain](#cross-platform-archiver-fallback-chain) for the sibling
+`object_extension()` convention). `trace::aggregate_and_report` exploits
+this: it doesn't need `Engine` to track which `.json` file belongs to which
+`CompileUnit` — it just globs `obj_dir` for `*.json` after
+`compile_all` returns, exactly as the object files themselves would already
+be sitting there. Merging N per-unit Chrome Trace documents into one is a
+matter of concatenating their `traceEvents` arrays (with a synthetic
+`process_name` metadata event per file, so viewers don't collapse every
+unit's events onto the same track) — no cross-file bookkeeping required
+beyond that.
+
+## Cross-Compilation and Static Analysis
+
+`--target` and `deft check` (v0.5.0) both extend existing machinery rather
+than introducing parallel code paths — the same instinct behind [IDE and
+Profiling Artifacts](#ide-and-profiling-artifacts) above.
+
+**One flag-injection point serves three call sites.** Compile args
+(`c_flags`/`cpp_flags`), analysis args (`c_analyze_args`/`cpp_analyze_args`),
+and the executable link command all need `--target=<triple>` when one is
+configured, and all three need it to be the *same* triple or the resulting
+objects/artifact won't agree with each other. Rather than threading the
+target string through three separate call sites, `Compiler` stores it once
+(`target: Option<String>`) and a single shared helper,
+`push_diagnostics_and_includes`, injects it into both compile and analyze
+paths; `link_command` reads the same field directly. This is also why
+`--target` participates in `cache_fingerprint` "for free" — that function
+calls the exact same `c_flags`/`cpp_flags` that already carry the flag, so
+there's no separate cache-key logic to keep in sync.
+
+**`deft check` reuses the build engine's spawn-and-parse path instead of
+duplicating it.** `run_compile` in [engine.rs](../src/engine.rs) — the
+function that spawns `clang`/`clang++`, captures stderr, and runs it through
+`parse_clang_diagnostics` — only ever reads a `CompileUnit`'s `language`,
+`source`, and `args` fields; it never touches `object`. `Compiler::analyze_unit`
+exploits this: it produces a `CompileUnit` whose `object` is an unused empty
+`PathBuf` and whose `args` start with `--analyze` instead of `-c -o <path>`,
+then hands it to the exact same `run_compile`/diagnostics-parsing pipeline
+`compile_all` uses. Clang's analyzer emits findings in the identical
+`file:line:col: severity: message` format as ordinary warnings, so
+`parse_clang_diagnostics` needed no changes at all to support it — the
+existing colorized `Diagnostic::render()` terminal output "just works" for
+analyzer findings without deft treating them as a distinct kind of
+diagnostic.
+
+**Analysis intentionally sees a smaller flag surface than a real compile.**
+`push_common` (real compiles) and `push_diagnostics_and_includes` (shared
+by real compiles and analysis) are deliberately two different functions, not
+one function with a mode flag: optimization level, LTO, sanitizers, `-g`,
+`-DNDEBUG`, and `-ftime-trace` all only affect codegen, which `--analyze`
+never reaches, so `deft check` never constructs them in the first place
+rather than constructing and then filtering them out.
