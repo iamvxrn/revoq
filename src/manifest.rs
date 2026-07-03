@@ -61,6 +61,13 @@ pub struct Package {
     /// abort the build if its reported version doesn't match.
     #[serde(default)]
     pub toolchain: Option<String>,
+    /// Optional cross-compilation target triple, e.g.
+    /// `"aarch64-unknown-linux-gnu"`. Passed to clang as `--target=<triple>`
+    /// during both compilation and linking. `deft build --target <triple>`
+    /// overrides this at the CLI (see `effective_target` in `main.rs`).
+    /// Unset by default — a native build never sees a `--target` flag.
+    #[serde(default)]
+    pub target: Option<String>,
 }
 
 /// `[profile.c]` and `[profile.cpp]`.
