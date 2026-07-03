@@ -4,7 +4,7 @@
 <h6>A modern package manager and build system for C and C++, with strict
 project-layout enforcement and deep Clang integration.</h6>
 
-[![Deft Version](https://img.shields.io/badge/version-0.4.0-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/deft-cli/deft/releases/tag/v0.4.0)
+[![Deft Version](https://img.shields.io/badge/version-0.5.0-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/deft-cli/deft/releases/tag/v0.5.0)
 [![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg?style=for-the-badge&labelColor=000000&color=ffffff)](#)
 
 </div>
@@ -44,6 +44,23 @@ rationale.
 - **Cross-platform static linking.** Archiving tries `ar` (Unix) or
   `llvm-ar` then `lib.exe` (Windows), falling through only when a tool is
   genuinely missing — see [docs/guides/architecture.md](docs/guides/architecture.md).
+- **Automatic IDE integration.** Every successful `deft build` writes a
+  clangd-compatible `compile_commands.json` to the project root, with no flag
+  required. See [IDE integration](#ide-integration-compile_commandsjson)
+  below.
+- **Built-in compilation profiling.** `deft build --trace` surfaces exactly
+  where clang's frontend/backend time goes — which headers and template
+  instantiations are the slowest — via Clang's `-ftime-trace`. See
+  [Profiling builds](#profiling-builds---trace) below.
+- **Zero-friction cross-compilation.** `deft build --target <triple>` (or
+  `target` in `deft.toml`) injects `--target=<triple>` into every compile and
+  link step, dependencies included — Clang is natively a cross-compiler, so
+  there's no separate toolchain to install. See
+  [Cross-compilation](#cross-compilation) below.
+- **Static analysis on demand.** `deft check` runs Clang's analyzer over your
+  sources — no object files, no linking, no artifact — and streams findings
+  through the same colorized diagnostic renderer `deft build` uses. See
+  [Static analysis](#static-analysis-deft-check) below.
 
 ## Installation
 
@@ -66,13 +83,14 @@ environment end-to-end, including a real probe compile against `<stdio.h>`.
 | `deft init`   | Scaffold a new package (`--lib`, `--bin`, `--c`, `--name`).            |
 | `deft build`  | Compile the package (and its dependencies, and workspace members).    |
 | `deft run`    | Build, then run the executable (`-- args` forwarded verbatim).         |
+| `deft check`  | Run Clang's static analyzer — no object files, no linking, no artifact. |
 | `deft update` | Re-resolve dependencies and rewrite `deft.lock`.                      |
 | `deft sync`   | Refresh the global package index (`~/.deft/deft-libs`) from the registry. |
 | `deft doctor` | Diagnose the local toolchain (compiler, archiver, git, headers, ...). |
 | `deft migrate`| Generate a starter `deft.toml` from an existing `CMakeLists.txt`.      |
 
 Common flags: `--release`, `-o <name>`, `-j <N>`, `--features a,b`,
-`--no-default-features`, `-v`, `-q`.
+`--no-default-features`, `--trace`, `--target <triple>`, `-v`, `-q`.
 
 Full flag-by-flag mechanics (what `--release` actually overrides, how
 `-j` is clamped, how `[-- ARGS...]` forwarding works, etc.) are documented in
@@ -129,6 +147,132 @@ injected *before* `extra_flags`, so granular sub-flags like
 go through the archiver, not clang's linker, so sanitizer flags don't apply
 there. See [docs/guides/manifest.md](docs/guides/manifest.md#sanitizers-and-lto--clang-sanitizer-support)
 for the full mechanics.
+
+## IDE integration (`compile_commands.json`)
+
+Every successful `deft build` writes a
+[JSON compilation database](https://clang.llvm.org/docs/JSONCompilationDatabase.html)
+to `compile_commands.json` in the project root — automatically, with no flag
+required. `clangd` (the language server behind VS Code's C/C++ extension,
+Neovim, CLion, and most other C/C++ editor tooling) reads this file to learn
+exactly how deft compiles each translation unit, so autocomplete, go-to-definition,
+and inline diagnostics all match your real build: the same `-std`, warnings,
+defines, and `-I` include paths deft passed to clang, not a guess.
+
+```sh
+deft build          # writes ./compile_commands.json alongside deft.toml
+```
+
+Nothing else to configure — point your editor's clangd at the project root
+(most extensions auto-detect `compile_commands.json` there) and it picks up
+the database on the next build. Entries cover the root package and every
+dependency compiled in that invocation; a workspace build merges every
+member's entries into the one file. Since a library's compile flags are
+deterministic, entries are written even for packages served from the global
+build cache — you get full IDE coverage without forcing a recompile.
+
+If you don't want the file tracked in git, add it to `.gitignore` (`deft
+init` doesn't do this for you, since some teams do commit it for reproducible
+editor setup across a team).
+
+## Profiling builds (`--trace`)
+
+Clang can report exactly where compilation time goes — parsing headers,
+expanding macros, instantiating templates — via `-ftime-trace`. Pass
+`--trace` to have deft turn that on and make sense of the output for you:
+
+```sh
+deft build --trace
+```
+
+deft injects `-ftime-trace` into every translation unit, merges each unit's
+individual trace file into one aggregate profile at
+`target/<debug|release>/deft_profile.json`, and prints a summary of the
+slowest headers and template instantiations straight to the terminal:
+
+```
+   Compiling demo v0.1.0 (3 units, 8 jobs)
+    Profile top 10 compilation bottlenecks
+          842.10ms  Source               /usr/include/c++/14/vector  (in main.cpp)
+          301.55ms  InstantiateFunction  std::vector<Widget>::push_back  (in main.cpp)
+          ...
+    Finished profile written to target/debug/deft_profile.json
+               load it at chrome://tracing or https://www.speedscope.app
+```
+
+`deft_profile.json` is standard [Chrome Trace Event
+Format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU) —
+drop it into `chrome://tracing` or [speedscope.app](https://www.speedscope.app)
+for a full interactive flame graph across every translation unit in the
+package, each shown on its own track. `--trace` is scoped to the package
+you're actively building; dependencies are compiled normally and aren't
+included in the profile.
+
+## Cross-Compilation
+
+Clang is natively a cross-compiler — the same `clang`/`clang++` binary you
+already have can target a different architecture or OS with just a
+`--target=<triple>` flag. deft exposes that directly: no separate toolchain
+to download, no target-specific `clang` symlinks to manage.
+
+Set it in `deft.toml`:
+
+```toml
+[package]
+name = "my_project"
+version = "0.2.0"
+target = "aarch64-unknown-linux-gnu"   # optional; omit for a native build
+```
+
+or override it per invocation:
+
+```sh
+deft build --target aarch64-apple-darwin
+deft build --target wasm32-unknown-unknown
+```
+
+`--target` on the command line always wins over the manifest's `target`
+field; omitting both compiles natively, with no `--target` flag reaching
+clang at all. Whichever triple wins is injected into **every** compile step
+and the final link step — and, importantly, into every *dependency's*
+compile too, since object files built for two different targets can't be
+linked into one artifact. `deft check --target <triple>` (see below)
+analyzes against the same target-specific headers and predefined macros a
+real cross-compiled build would see.
+
+deft doesn't validate the triple itself — an unrecognized one simply
+surfaces as clang's own error the moment it's invoked, the same way an
+invalid `extra_flags` entry would. See
+[docs/guides/manifest.md](docs/guides/manifest.md#target--cross-compilation)
+for the full resolution/priority rules.
+
+## Static analysis (`deft check`)
+
+`deft check` runs Clang's static analyzer over your package's own sources —
+parsing and analysis only, no object files, no linker, no binary:
+
+```sh
+deft check
+```
+
+```
+   Checking 3 files (8 jobs)
+warning[deadcode.DeadStores]: Value stored to 'x' is never read
+  --> src/main.cpp:12:5
+
+    Finished static analysis: 3 files checked
+```
+
+Findings are streamed through the exact same colorized diagnostic renderer
+`deft build` uses, as each file finishes — not batched until the end. A file
+the analyzer couldn't even parse (a real syntax error, a missing header)
+fails the command; analyzer findings on an otherwise-clean parse are printed
+as warnings and don't. `deft check` accepts the same `--features`,
+`--no-default-features`, `--target`, `-j`, and `--manifest-path` flags as
+`deft build`, minus everything that only matters for producing a binary
+(`--release`, `-o`, `--trace`). Dependencies are resolved just far enough to
+put their headers on the include path — never compiled or analyzed
+themselves, since `deft check` audits the package you're working on.
 
 ## The deft home
 
