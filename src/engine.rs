@@ -15,11 +15,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
 
+use crate::compdb::CompileCommandEntry;
 use crate::compiler::{CompileUnit, Compiler, Language, LinkCommand};
 use crate::error::{CompileDiagnostic, DeftError, IoPathExt, Result};
 use crate::hash;
 use crate::manifest::{Manifest, Package};
 use crate::resolver;
+use crate::trace;
 
 /// What kind of artifact a package produces, decided by which entry file the
 /// strict layout contains.
@@ -166,6 +168,10 @@ struct UnitResult {
 pub struct BuiltArtifact {
     pub path: PathBuf,
     pub cache_hit: bool,
+    /// One `compile_commands.json` entry per translation unit in this
+    /// package — populated regardless of `cache_hit`, since the compile
+    /// flags are fully determined without actually invoking the compiler.
+    pub compile_commands: Vec<CompileCommandEntry>,
 }
 
 /// Top-level build orchestrator.
@@ -176,16 +182,22 @@ pub struct Engine {
     /// When true, suppress human-readable progress/diagnostic text — the
     /// caller is rendering a single structured `--json` payload instead.
     json: bool,
+    /// When true, aggregate this package's `-ftime-trace` output into
+    /// `deft_profile.json` and print a bottleneck summary after compiling
+    /// (`deft build --trace`). Has no effect if the compiler wasn't also
+    /// told to emit `-ftime-trace` (see `Compiler::new`'s `trace` param).
+    trace: bool,
 }
 
 impl Engine {
-    pub fn new(jobs: usize, verbose: bool, quiet: bool, json: bool) -> Engine {
+    pub fn new(jobs: usize, verbose: bool, quiet: bool, json: bool, trace: bool) -> Engine {
         let jobs = jobs.max(1);
         Engine {
             jobs,
             verbose,
             quiet,
             json,
+            trace,
         }
     }
 
@@ -220,6 +232,35 @@ impl Engine {
 
         let artifact = artifact_path(&profile_dir, layout.crate_kind, &package.name, output_name);
 
+        // Plan every translation unit up front. This is pure argument-vector
+        // construction — no filesystem or process work — so a
+        // `compile_commands.json` entry exists for every source file
+        // regardless of whether the package below turns out to be served
+        // from the global cache.
+        let cwd = std::env::current_dir().unwrap_or_else(|_| target_dir.to_path_buf());
+        let mut units = Vec::with_capacity(sources.len());
+        let mut has_cpp = false;
+        for src in &sources {
+            let obj = object_path(&obj_dir, layout, src);
+            let unit = compiler.compile_unit(src, &obj)?;
+            if unit.language == Language::Cpp {
+                has_cpp = true;
+            }
+            units.push(unit);
+        }
+        let compile_commands: Vec<CompileCommandEntry> = units
+            .iter()
+            .map(|u| CompileCommandEntry {
+                directory: cwd.clone(),
+                file: u.source.clone(),
+                arguments: {
+                    let mut args = vec![u.language.driver().to_string()];
+                    args.extend(u.args.clone());
+                    args
+                },
+            })
+            .collect();
+
         // --- Global cache short-circuit ---------------------------------
         // Before spinning up the compile thread-pool, see whether a
         // byte-identical build (same sources, same flags, same target) has
@@ -247,24 +288,18 @@ impl Engine {
                     return Ok(BuiltArtifact {
                         path: artifact,
                         cache_hit: true,
+                        compile_commands,
                     });
                 }
             }
         }
 
-        // Plan every translation unit.
-        let mut units = Vec::with_capacity(sources.len());
-        let mut has_cpp = false;
-        for src in &sources {
-            let obj = object_path(&obj_dir, layout, src);
-            if let Some(parent) = obj.parent() {
+        // Now that we know we're actually compiling, create each object
+        // file's parent directory (skipped entirely on the cache hit above).
+        for unit in &units {
+            if let Some(parent) = unit.object.parent() {
                 fs::create_dir_all(parent).path_ctx(parent)?;
             }
-            let unit = compiler.compile_unit(src, &obj)?;
-            if unit.language == Language::Cpp {
-                has_cpp = true;
-            }
-            units.push(unit);
         }
 
         if !self.quiet {
@@ -286,6 +321,10 @@ impl Engine {
                 "  \x1b[2m[engine]\x1b[0m compiled in {:.2}s",
                 started.elapsed().as_secs_f64()
             );
+        }
+
+        if self.trace {
+            trace::aggregate_and_report(&obj_dir, &profile_dir, self.quiet);
         }
 
         if let Some(parent) = artifact.parent() {
@@ -329,7 +368,106 @@ impl Engine {
         Ok(BuiltArtifact {
             path: artifact,
             cache_hit: false,
+            compile_commands,
         })
+    }
+
+    /// `deft check`: run Clang's static analyzer (`--analyze`) over every
+    /// source file in `layout`, streaming diagnostics to the terminal as
+    /// they arrive. Never touches the linker and never produces an object
+    /// file or artifact — a pure read of the source tree.
+    ///
+    /// Unlike `build_package`/`compile_all`, a unit's diagnostics are
+    /// printed **regardless of severity or success**: the whole point of
+    /// `deft check` is to surface analyzer findings, not just errors. Only a
+    /// unit that clang itself couldn't parse (non-zero exit) counts as a
+    /// failure — analyzer findings on an otherwise-clean parse are printed
+    /// as warnings and never fail the command, the same way a successful
+    /// `deft build` can still emit compiler warnings without failing.
+    pub fn check_package(&self, layout: &Layout, compiler: &Compiler) -> Result<()> {
+        let sources = layout.collect_sources()?;
+        if sources.is_empty() {
+            return Err(DeftError::LayoutViolation(format!(
+                "no source files found under {}",
+                layout.src.display()
+            )));
+        }
+
+        let mut units = Vec::with_capacity(sources.len());
+        for src in &sources {
+            units.push(compiler.analyze_unit(src)?);
+        }
+
+        if !self.quiet {
+            println!(
+                "\x1b[1;36m   Checking\x1b[0m {} file{} ({} job{})",
+                units.len(),
+                plural(units.len()),
+                self.jobs,
+                plural(self.jobs),
+            );
+        }
+
+        let total = units.len();
+        let queue: Arc<Mutex<VecDeque<CompileUnit>>> = Arc::new(Mutex::new(VecDeque::from(units)));
+        let (tx, rx) = mpsc::channel::<UnitResult>();
+
+        let worker_count = self.jobs.min(total).max(1);
+        let mut handles = Vec::with_capacity(worker_count);
+        for _ in 0..worker_count {
+            let queue = Arc::clone(&queue);
+            let tx = tx.clone();
+            let handle = thread::spawn(move || loop {
+                let unit = {
+                    let mut q = match queue.lock() {
+                        Ok(g) => g,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    q.pop_front()
+                };
+                let Some(unit) = unit else { break };
+
+                let result = run_compile(&unit);
+                if tx.send(result).is_err() {
+                    break;
+                }
+            });
+            handles.push(handle);
+        }
+        drop(tx);
+
+        let mut failures = 0usize;
+        for result in rx {
+            for d in &result.diagnostics {
+                eprint!("{}", d.render());
+            }
+            if !result.success {
+                failures += 1;
+                if result.diagnostics.is_empty() && !result.raw_stderr.trim().is_empty() {
+                    // clang exited non-zero but its stderr didn't parse into
+                    // any structured diagnostic — surface it raw rather than
+                    // silently swallowing the only clue about the failure.
+                    eprintln!("{}", result.raw_stderr.trim_end());
+                }
+            }
+        }
+
+        for handle in handles {
+            let _ = handle.join();
+        }
+
+        if failures > 0 {
+            return Err(DeftError::Analysis { failures });
+        }
+
+        if !self.quiet {
+            println!(
+                "\x1b[1;32m    Finished\x1b[0m static analysis: {} file{} checked",
+                total,
+                plural(total),
+            );
+        }
+        Ok(())
     }
 
     /// Run all compile units across a fixed-size thread pool.
@@ -870,6 +1008,7 @@ mod tests {
             description: None,
             authors: Vec::new(),
             toolchain: None,
+            target: None,
         };
         (layout, package)
     }
@@ -904,8 +1043,10 @@ mod tests {
             Vec::new(),
             &[],
             false,
+            false,
+            None,
         );
-        let engine = Engine::new(1, false, true, false);
+        let engine = Engine::new(1, false, true, false, false);
         let target_dir = project.join("target");
 
         let first = engine

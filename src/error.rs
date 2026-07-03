@@ -54,6 +54,15 @@ pub enum DeftError {
         diagnostics: Vec<CompileDiagnostic>,
     },
 
+    /// `deft check` failed: at least one source file couldn't even be parsed
+    /// by Clang's analyzer. Diagnostics themselves are already streamed to
+    /// the terminal as each unit finishes (`Engine::check_package`), so —
+    /// unlike `Compilation`, whose structured diagnostics also feed `deft
+    /// build --json` — this only needs the count. Kept as its own variant
+    /// so the top-line message doesn't claim a "build" happened when `deft
+    /// check` never compiles or links anything.
+    Analysis { failures: usize },
+
     /// A configuration value was invalid (e.g. unknown optimization level).
     Config(String),
 
@@ -120,6 +129,13 @@ impl fmt::Display for DeftError {
                 write!(
                     f,
                     "build failed: {} translation unit(s) did not compile",
+                    failures
+                )
+            }
+            DeftError::Analysis { failures, .. } => {
+                write!(
+                    f,
+                    "check failed: {} file(s) could not be analyzed",
                     failures
                 )
             }

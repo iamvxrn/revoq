@@ -213,6 +213,15 @@ pub struct Compiler {
     debug: bool,
     /// Release builds set NDEBUG and trust the profile's optimization level.
     release: bool,
+    /// When true, inject `-ftime-trace` so every translation unit emits a
+    /// sibling `.json` profiling file next to its object (`deft build
+    /// --trace`); see `trace.rs` for how those files get aggregated.
+    trace: bool,
+    /// Cross-compilation target triple (`deft build --target` or the
+    /// `[package] target` manifest field). When set, injected as
+    /// `--target=<triple>` into every compile *and* the final link step, so
+    /// object files and the linked artifact always agree on target.
+    target: Option<String>,
 }
 
 impl Compiler {
@@ -228,6 +237,8 @@ impl Compiler {
         include_dirs: Vec<PathBuf>,
         active_features: &[String],
         release: bool,
+        trace: bool,
+        target: Option<String>,
     ) -> Compiler {
         let feature_defines = active_features
             .iter()
@@ -245,6 +256,8 @@ impl Compiler {
             feature_defines,
             debug: !release,
             release,
+            trace,
+            target,
         }
     }
 
@@ -310,6 +323,34 @@ impl Compiler {
             language,
             source: source.to_path_buf(),
             object: object.to_path_buf(),
+            args,
+        })
+    }
+
+    /// Build the `deft check` static-analysis invocation for a single source
+    /// file: `--analyze` in place of `-c -o <object>`, so clang parses and
+    /// runs its analyzer matrix without emitting an object file. Reuses
+    /// `CompileUnit`'s shape purely for its `language`/`source`/`args`
+    /// fields and `run_compile`'s existing spawn-and-parse path in
+    /// `engine.rs`; `object` is an unused placeholder since analysis never
+    /// produces one.
+    pub fn analyze_unit(&self, source: &Path) -> Result<CompileUnit> {
+        let language = Language::from_extension(source).ok_or_else(|| {
+            DeftError::Config(format!(
+                "cannot determine language for '{}' (unsupported extension)",
+                source.display()
+            ))
+        })?;
+
+        let args = match language {
+            Language::C => self.c_analyze_args(source),
+            Language::Cpp => self.cpp_analyze_args(source),
+        };
+
+        Ok(CompileUnit {
+            language,
+            source: source.to_path_buf(),
+            object: PathBuf::new(),
             args,
         })
     }
@@ -399,6 +440,47 @@ impl Compiler {
         Ok(args)
     }
 
+    /// Argument vector for `deft check`'s analysis pass over a C translation
+    /// unit. Deliberately a smaller set than `c_flags`: no optimization
+    /// level, no LTO, no sanitizers, no `extra_flags` — none of those affect
+    /// what the analyzer parses or reports, and `--analyze` never reaches
+    /// codegen. Standard and warnings still come from the profile, same as a
+    /// real build, so analysis sees the same language dialect and enabled
+    /// diagnostics.
+    fn c_analyze_args(&self, source: &Path) -> Vec<String> {
+        let p = &self.c_profile;
+        let mut args = vec!["--analyze".to_string(), format!("-std={}", p.standard)];
+        for w in &p.warnings {
+            args.push(warning_flag(w));
+        }
+        self.push_diagnostics_and_includes(&mut args, &p.defines);
+        args.push(source.to_string_lossy().to_string());
+        args
+    }
+
+    /// C++ counterpart to `c_analyze_args` — only ever reads `cpp_profile`,
+    /// same isolation guarantee as `cpp_args`/`cpp_flags`.
+    fn cpp_analyze_args(&self, source: &Path) -> Vec<String> {
+        let p = &self.cpp_profile;
+        let mut args = vec!["--analyze".to_string(), format!("-std={}", p.standard)];
+        if p.rtti {
+            args.push("-frtti".to_string());
+        } else {
+            args.push("-fno-rtti".to_string());
+        }
+        if p.exceptions {
+            args.push("-fexceptions".to_string());
+        } else {
+            args.push("-fno-exceptions".to_string());
+        }
+        for w in &p.warnings {
+            args.push(warning_flag(w));
+        }
+        self.push_diagnostics_and_includes(&mut args, &p.defines);
+        args.push(source.to_string_lossy().to_string());
+        args
+    }
+
     /// Flags-only fingerprint for the global build cache: every flag that
     /// affects codegen, with no source/object paths baked in, so the same
     /// flags produce the same cache key regardless of where the project
@@ -423,16 +505,13 @@ impl Compiler {
         profile_defines: &[String],
         force_debug_syms: bool,
     ) {
-        // Emit machine-parseable diagnostics with caret context.
-        args.push("-fcolor-diagnostics".to_string());
-        args.push("-fno-caret-diagnostics".to_string());
+        self.push_diagnostics_and_includes(args, profile_defines);
 
-        args.push(format!("-I{}", self.own_include_dir.display()));
-        for dir in &self.include_dirs {
-            args.push(format!("-I{}", dir.display()));
-        }
-        for def in profile_defines.iter().chain(self.feature_defines.iter()) {
-            args.push(format!("-D{def}"));
+        // `deft build --trace`: clang writes this unit's profile next to its
+        // `-o` object path (same basename, `.json` extension) — see
+        // trace.rs for the aggregation step that follows compilation.
+        if self.trace {
+            args.push("-ftime-trace".to_string());
         }
 
         if self.debug || force_debug_syms {
@@ -440,6 +519,34 @@ impl Compiler {
         }
         if self.release {
             args.push("-DNDEBUG".to_string());
+        }
+    }
+
+    /// The subset of flags shared by a real compile *and* a `deft check`
+    /// analysis pass: colorized machine-parseable diagnostics, the
+    /// cross-compilation target (if any), include paths, and defines. Kept
+    /// separate from `push_common` because analysis never wants `-g`,
+    /// `-DNDEBUG`, or `-ftime-trace` — none of those affect what the
+    /// analyzer reports, since `--analyze` never reaches codegen.
+    fn push_diagnostics_and_includes(&self, args: &mut Vec<String>, profile_defines: &[String]) {
+        // Emit machine-parseable diagnostics with caret context.
+        args.push("-fcolor-diagnostics".to_string());
+        args.push("-fno-caret-diagnostics".to_string());
+
+        // `deft build --target` / `[package] target`: cross-compile. Kept in
+        // the shared helper (rather than only `push_common`) so `deft
+        // check --target` analyzes against the same target-specific
+        // headers/macros a cross-compiled build would actually see.
+        if let Some(target) = &self.target {
+            args.push(format!("--target={target}"));
+        }
+
+        args.push(format!("-I{}", self.own_include_dir.display()));
+        for dir in &self.include_dirs {
+            args.push(format!("-I{}", dir.display()));
+        }
+        for def in profile_defines.iter().chain(self.feature_defines.iter()) {
+            args.push(format!("-D{def}"));
         }
     }
 
@@ -487,6 +594,12 @@ impl Compiler {
         let sanitizers = parse_sanitizers(profile_sanitizers).unwrap_or_default();
 
         let mut args = Vec::new();
+        // Cross-compilation: the linked artifact must agree with the object
+        // files it's linking, or clang's default (host) linker invocation
+        // will reject them as the wrong architecture/ABI.
+        if let Some(target) = &self.target {
+            args.push(format!("--target={target}"));
+        }
         if profile_lto {
             args.push("-flto".to_string());
         }
@@ -567,6 +680,8 @@ mod tests {
             Vec::new(),
             &[],
             false,
+            false,
+            None,
         )
     }
 
@@ -666,6 +781,8 @@ mod tests {
             Vec::new(),
             &[],
             true,
+            false,
+            None,
         );
         let fp_release = release.cache_fingerprint(Language::C).unwrap();
 
@@ -704,6 +821,8 @@ mod tests {
             Vec::new(),
             &[],
             false,
+            false,
+            None,
         )
     }
 
@@ -835,6 +954,149 @@ mod tests {
             .position(|a| a == "main.o")
             .expect("object file present");
         assert!(sanitize_pos < object_pos);
+    }
+
+    /// `deft build --trace` must inject `-ftime-trace` into every
+    /// compile — and only when explicitly requested, matching the
+    /// backwards-compatibility guarantee already covered by
+    /// `empty_sanitizers_is_backwards_compatible_with_v0_3_0`.
+    #[test]
+    fn trace_flag_injects_ftime_trace_only_when_requested() {
+        let without_trace = compiler();
+        assert!(!without_trace
+            .c_flags()
+            .unwrap()
+            .contains(&"-ftime-trace".to_string()));
+
+        let with_trace = Compiler::new(
+            CProfile::default(),
+            CppProfile::default(),
+            Path::new("."),
+            Vec::new(),
+            &[],
+            false,
+            true,
+            None,
+        );
+        assert!(with_trace
+            .c_flags()
+            .unwrap()
+            .contains(&"-ftime-trace".to_string()));
+        assert!(with_trace
+            .cpp_flags()
+            .unwrap()
+            .contains(&"-ftime-trace".to_string()));
+    }
+
+    fn compiler_with_target(target: &str) -> Compiler {
+        Compiler::new(
+            CProfile::default(),
+            CppProfile::default(),
+            Path::new("."),
+            Vec::new(),
+            &[],
+            false,
+            false,
+            Some(target.to_string()),
+        )
+    }
+
+    /// `--target=<triple>` must be injected into both compile phases, and
+    /// must be absent entirely when no target was configured — the default,
+    /// native-build case must stay byte-for-byte unchanged from pre-0.5.0
+    /// behavior.
+    #[test]
+    fn target_flag_injects_into_compile_args_only_when_set() {
+        assert!(!compiler()
+            .c_flags()
+            .unwrap()
+            .iter()
+            .any(|a| a.starts_with("--target=")));
+
+        let cross = compiler_with_target("aarch64-unknown-linux-gnu");
+        assert!(cross
+            .c_flags()
+            .unwrap()
+            .contains(&"--target=aarch64-unknown-linux-gnu".to_string()));
+        assert!(cross
+            .cpp_flags()
+            .unwrap()
+            .contains(&"--target=aarch64-unknown-linux-gnu".to_string()));
+    }
+
+    /// The same `--target=` flag compiled into the object files must also
+    /// reach the final link step, and must precede the object files in the
+    /// argument vector — mirroring
+    /// `link_command_propagates_matching_sanitizer_flags`.
+    #[test]
+    fn target_flag_propagates_to_link_command_but_not_archiver() {
+        let cross = compiler_with_target("wasm32-unknown-unknown");
+        let objects = vec![PathBuf::from("main.o")];
+
+        let exe_cmds = cross.link_command(&objects, &PathBuf::from("app"), false, false);
+        assert_eq!(exe_cmds.len(), 1);
+        let target_pos = exe_cmds[0]
+            .args
+            .iter()
+            .position(|a| a == "--target=wasm32-unknown-unknown")
+            .expect("target flag present at link time");
+        let object_pos = exe_cmds[0]
+            .args
+            .iter()
+            .position(|a| a == "main.o")
+            .expect("object file present");
+        assert!(target_pos < object_pos);
+
+        let lib_output = if cfg!(target_os = "windows") {
+            PathBuf::from("mylib.lib")
+        } else {
+            PathBuf::from("libmy.a")
+        };
+        let lib_cmds = cross.link_command(&objects, &lib_output, false, true);
+        for cmd in &lib_cmds {
+            assert!(!cmd.args.iter().any(|a| a.starts_with("--target=")));
+        }
+    }
+
+    /// `deft check` must swap `-c -o <obj>` for `--analyze`, keep the
+    /// profile's warnings/standard/includes/target, and drop everything
+    /// that only matters for real codegen (optimization, LTO, sanitizers,
+    /// `-g`/`-DNDEBUG`, `-ftime-trace`, `extra_flags`).
+    #[test]
+    fn analyze_unit_uses_analyze_flag_and_drops_codegen_only_flags() {
+        let c = Compiler::new(
+            CProfile {
+                warnings: vec!["all".to_string(), "extra".to_string()],
+                sanitizers: vec!["address".to_string()],
+                lto: true,
+                extra_flags: vec!["-Wpadded".to_string()],
+                ..CProfile::default()
+            },
+            CppProfile::default(),
+            Path::new("."),
+            Vec::new(),
+            &[],
+            false,
+            false,
+            Some("aarch64-unknown-linux-gnu".to_string()),
+        );
+        let unit = c.analyze_unit(Path::new("src/main.c")).unwrap();
+
+        assert_eq!(unit.args[0], "--analyze");
+        assert!(!unit.args.contains(&"-c".to_string()));
+        assert!(!unit.args.iter().any(|a| a == "-o"));
+        assert!(unit.args.contains(&"-Wall".to_string()));
+        assert!(unit.args.contains(&"-Wextra".to_string()));
+        assert!(unit
+            .args
+            .contains(&"--target=aarch64-unknown-linux-gnu".to_string()));
+        assert!(!unit.args.iter().any(|a| a.starts_with("-O")));
+        assert!(!unit.args.contains(&"-flto".to_string()));
+        assert!(!unit.args.iter().any(|a| a.starts_with("-fsanitize=")));
+        assert!(!unit.args.contains(&"-g".to_string()));
+        assert!(!unit.args.contains(&"-ftime-trace".to_string()));
+        assert!(!unit.args.contains(&"-Wpadded".to_string()));
+        assert_eq!(unit.args.last().unwrap(), "src/main.c");
     }
 
     /// Library builds go through the archiver, not the linker — sanitizer

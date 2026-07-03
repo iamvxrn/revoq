@@ -5,6 +5,7 @@
 //! in the dedicated modules.
 
 mod cli;
+mod compdb;
 mod compiler;
 mod doctor;
 mod engine;
@@ -14,12 +15,13 @@ mod json;
 mod manifest;
 mod migrate;
 mod resolver;
+mod trace;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-use cli::{BuildArgs, Cli, Command as Cmd, InitArgs, RunArgs, UpdateArgs, VendorArgs};
+use cli::{BuildArgs, CheckArgs, Cli, Command as Cmd, InitArgs, RunArgs, UpdateArgs, VendorArgs};
 use compiler::Compiler;
 use engine::{default_jobs, require_package, Crate, Engine, Layout};
 use error::{DeftError, IoPathExt, Result};
@@ -42,6 +44,7 @@ fn main() {
         Cmd::Sync => cmd_sync(verbose, quiet),
         Cmd::Migrate(args) => migrate::run(&args, quiet),
         Cmd::Vendor(args) => cmd_vendor(args, verbose, quiet),
+        Cmd::Check(args) => cmd_check(args, verbose, quiet),
     };
 
     if let Err(err) = result {
@@ -64,6 +67,10 @@ struct BuildOutcome {
     /// package itself) were served from the global build cache instead of
     /// being recompiled.
     cache_hits: usize,
+    /// One `compile_commands.json` entry per translation unit compiled in
+    /// this invocation (root package plus every dependency), written to the
+    /// project root by `cmd_build` after a successful build.
+    compile_commands: Vec<compdb::CompileCommandEntry>,
 }
 
 /// Top-level `deft build` entry point.
@@ -180,12 +187,26 @@ fn cmd_build(args: BuildArgs, verbose: bool, quiet: bool, json: bool) -> Result<
     let root = project_root(args.manifest_path.as_deref())?;
     let manifest = Manifest::load(&root)?;
 
-    if manifest.is_workspace() {
+    let outcome = if manifest.is_workspace() {
         // Workspaces build each member; we surface the last member's artifact.
-        return build_workspace(&root, &manifest, &args, verbose, quiet, json);
+        build_workspace(&root, &manifest, &args, verbose, quiet, json)?
+    } else {
+        build_single(&root, &manifest, &args, verbose, quiet, json)?
+    };
+
+    // Automatic IDE integration: every successful build regenerates
+    // compile_commands.json at the project root, with no flag required.
+    if !outcome.compile_commands.is_empty() {
+        compdb::write(&root, &outcome.compile_commands)?;
+        if verbose {
+            eprintln!(
+                "  \x1b[2m[deft]\x1b[0m wrote {} entries to compile_commands.json",
+                outcome.compile_commands.len()
+            );
+        }
     }
 
-    build_single(&root, &manifest, &args, verbose, quiet, json)
+    Ok(outcome)
 }
 
 /// Build a standalone (non-workspace) package.
@@ -232,9 +253,22 @@ fn build_single(
         }
     };
 
+    // --- Cross-compilation target -----------------------------------------
+    // CLI `--target` wins over the manifest's `[package] target`; whichever
+    // wins here also governs every dependency compiled below, since a
+    // dependency built for the host while the root package targets some
+    // other triple would fail to link (mismatched architecture/ABI).
+    let target = effective_target(args.target.as_deref(), manifest);
+    if verbose {
+        if let Some(t) = &target {
+            eprintln!("  \x1b[2m[deft]\x1b[0m cross-compiling for target: {t}");
+        }
+    }
+
     // Build dependencies first so their archives/headers exist.
     let target_dir = root.join("target");
-    let (dep_includes, dep_cache_hits) = build_dependencies(&resolved, args, verbose, quiet, json)?;
+    let (dep_includes, dep_cache_hits, dep_compile_commands) =
+        build_dependencies(&resolved, args, verbose, quiet, json, target.as_deref())?;
 
     // --- Compile the root package ----------------------------------------
     let features = manifest.resolve_features(&args.features, args.no_default_features);
@@ -252,9 +286,11 @@ fn build_single(
         dep_includes,
         &features,
         args.release,
+        args.trace,
+        target,
     );
 
-    let engine = Engine::new(jobs(args), verbose, quiet, json);
+    let engine = Engine::new(jobs(args), verbose, quiet, json, args.trace);
     let built = engine.build_package(
         &layout,
         &package,
@@ -264,10 +300,14 @@ fn build_single(
         args.release,
     )?;
 
+    let mut compile_commands = dep_compile_commands;
+    compile_commands.extend(built.compile_commands);
+
     Ok(BuildOutcome {
         artifact: built.path,
         crate_kind: layout.crate_kind,
         cache_hits: dep_cache_hits + if built.cache_hit { 1 } else { 0 },
+        compile_commands,
     })
 }
 
@@ -334,6 +374,7 @@ fn build_workspace(
         .unwrap_or_default();
 
     let mut last: Option<BuildOutcome> = None;
+    let mut all_compile_commands = Vec::new();
     for member in &members {
         let member_root = root.join(member);
         let member_manifest = Manifest::load(&member_root)?;
@@ -341,23 +382,36 @@ fn build_workspace(
             println!("\x1b[1;36m   Workspace\x1b[0m building member '{member}'");
         }
         let outcome = build_single(&member_root, &member_manifest, args, verbose, quiet, json)?;
+        all_compile_commands.extend(outcome.compile_commands.clone());
         last = Some(outcome);
     }
 
-    last.ok_or_else(|| DeftError::LayoutViolation("workspace has no members to build".into()))
+    let mut outcome = last
+        .ok_or_else(|| DeftError::LayoutViolation("workspace has no members to build".into()))?;
+    outcome.compile_commands = all_compile_commands;
+    Ok(outcome)
 }
 
 /// Build all resolved dependencies and collect their include directories,
-/// plus how many of them were served from the global build cache.
+/// how many of them were served from the global build cache, and their
+/// compile_commands.json entries.
+///
+/// `cross_target` is the *root* package's already-resolved effective target
+/// triple (CLI `--target` or its manifest's `[package] target`), not each
+/// dependency's own manifest field — every dependency is force-compiled for
+/// the same triple as the root package, since linking object files built for
+/// different targets into one artifact doesn't work.
 fn build_dependencies(
     resolved: &[ResolvedDep],
     args: &BuildArgs,
     verbose: bool,
     quiet: bool,
     json: bool,
-) -> Result<(Vec<PathBuf>, usize)> {
+    cross_target: Option<&str>,
+) -> Result<(Vec<PathBuf>, usize, Vec<compdb::CompileCommandEntry>)> {
     let mut includes = Vec::new();
     let mut cache_hits = 0usize;
+    let mut compile_commands = Vec::new();
 
     for dep in resolved {
         // Each dependency must itself be deft-standard.
@@ -375,6 +429,10 @@ fn build_dependencies(
         // Dependencies are always built as libraries regardless of their own
         // entry kind hint — we link their archive into the consumer.
         let dep_features = dep_manifest.resolve_features(&[], false);
+        // Dependencies are never traced: `--trace` profiles the package
+        // being actively worked on, not its (already-stable) dependencies.
+        // They *are* cross-compiled for `cross_target`, though — see the
+        // doc comment above.
         let dep_compiler = Compiler::new(
             dep_manifest.profile.c.clone().unwrap_or_default(),
             dep_manifest.profile.cpp.clone().unwrap_or_default(),
@@ -382,10 +440,12 @@ fn build_dependencies(
             Vec::new(),
             &dep_features,
             args.release,
+            false,
+            cross_target.map(|t| t.to_string()),
         );
 
         let dep_target = dep.cache_path.join("target");
-        let engine = Engine::new(jobs(args), verbose, quiet, json);
+        let engine = Engine::new(jobs(args), verbose, quiet, json, false);
 
         // Force library output for dependencies even if they expose main.*.
         let lib_layout = Layout {
@@ -403,13 +463,14 @@ fn build_dependencies(
         if built.cache_hit {
             cache_hits += 1;
         }
+        compile_commands.extend(built.compile_commands);
 
         // Expose the dependency's src/ as an include path (public headers).
         includes.push(dep.cache_path.join("src"));
         includes.push(dep.cache_path.join("include"));
     }
 
-    Ok((includes, cache_hits))
+    Ok((includes, cache_hits, compile_commands))
 }
 
 /// `deft run`
@@ -440,6 +501,49 @@ fn cmd_run(args: RunArgs, verbose: bool, quiet: bool) -> Result<()> {
         std::process::exit(status.code().unwrap_or(1));
     }
     Ok(())
+}
+
+/// `deft check` — run Clang's static analyzer over the package's own
+/// sources, with no object files, no linking, and no artifact produced.
+///
+/// Dependencies are resolved (respecting `third_party/` vendoring, same as
+/// `deft build`) purely to expose their headers on the include path — they
+/// are never compiled or analyzed themselves, since `deft check` audits the
+/// package you're working on, not its already-vetted dependencies.
+fn cmd_check(args: CheckArgs, verbose: bool, quiet: bool) -> Result<()> {
+    let root = project_root(args.manifest_path.as_deref())?;
+    let manifest = Manifest::load(&root)?;
+    let layout = Layout::assert_deft_standard(&root)?;
+
+    let resolved = match vendored_dependencies(&root, &manifest)? {
+        Some(vendored) => vendored,
+        None => {
+            let resolver = Resolver::new(verbose)?;
+            let existing_lock = Lockfile::load(&root)?;
+            resolver.resolve_all(&manifest, existing_lock.as_ref())?
+        }
+    };
+    let dep_includes: Vec<PathBuf> = resolved
+        .iter()
+        .flat_map(|dep| [dep.cache_path.join("src"), dep.cache_path.join("include")])
+        .collect();
+
+    let features = manifest.resolve_features(&args.features, args.no_default_features);
+    let target = effective_target(args.target.as_deref(), &manifest);
+
+    let compiler = Compiler::new(
+        manifest.profile.c.clone().unwrap_or_default(),
+        manifest.profile.cpp.clone().unwrap_or_default(),
+        &root,
+        dep_includes,
+        &features,
+        false, // release: irrelevant — analysis never reaches codegen.
+        false, // trace: irrelevant — no compilation happens to profile.
+        target,
+    );
+
+    let engine = Engine::new(resolve_jobs(args.jobs), verbose, quiet, false, false);
+    engine.check_package(&layout, &compiler)
 }
 
 /// `deft update` — re-resolve from scratch and rewrite the lockfile.
@@ -657,7 +761,24 @@ fn project_root(explicit: Option<&Path>) -> Result<PathBuf> {
 
 /// Effective job count for an invocation.
 fn jobs(args: &BuildArgs) -> usize {
-    args.jobs.unwrap_or_else(default_jobs).max(1)
+    resolve_jobs(args.jobs)
+}
+
+/// Shared by `deft build`/`deft run` (via `jobs`) and `deft check`: an
+/// explicit `-j` is floored to a minimum of `1`; an absent one falls back to
+/// `default_jobs()` (`std::thread::available_parallelism()`).
+fn resolve_jobs(explicit: Option<usize>) -> usize {
+    explicit.unwrap_or_else(default_jobs).max(1)
+}
+
+/// Resolve the cross-compilation target triple for a build: an explicit
+/// `--target` on the CLI always wins; otherwise fall back to the package's
+/// own `[package] target` manifest field (if any). `None` means "compile
+/// natively" — no `--target` flag reaches clang at all.
+fn effective_target(cli_target: Option<&str>, manifest: &Manifest) -> Option<String> {
+    cli_target
+        .map(|t| t.to_string())
+        .or_else(|| manifest.package.as_ref().and_then(|p| p.target.clone()))
 }
 
 fn short_sha(sha: &str) -> &str {
@@ -825,6 +946,7 @@ mod tests {
             artifact: PathBuf::from("/tmp/target/debug/app"),
             crate_kind: Crate::Executable,
             cache_hits: 2,
+            compile_commands: Vec::new(),
         };
         let rendered = build_success_payload(&outcome, 1234).render();
         assert!(rendered.contains("\"status\":\"success\""));
