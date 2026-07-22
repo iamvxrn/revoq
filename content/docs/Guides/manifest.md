@@ -41,6 +41,12 @@ description = "optional"
 authors = ["optional", "list"]
 toolchain = "clang-18.1"   # optional
 target = "aarch64-unknown-linux-gnu"   # optional
+
+# Legacy support (0.6.0) — all optional, all default to the strict behavior:
+source_dir      = "src"                       # where sources live
+include_dirs    = ["legacy/include"]          # extra -I paths
+defines         = ["HAVE_CONFIG_H", "N=64"]   # project-wide -D (C and C++)
+ignore_warnings = false                       # true injects -w
 ```
 
 ```rust
@@ -51,11 +57,41 @@ pub struct Package {
     pub authors: Vec<String>,         // default: []
     pub toolchain: Option<String>,    // default: None
     pub target: Option<String>,       // default: None
+    // --- legacy support (0.6.0) ---
+    pub source_dir: String,           // default: "src"
+    pub include_dirs: Vec<String>,    // default: []
+    pub defines: Vec<String>,         // default: []
+    pub ignore_warnings: bool,        // default: false
 }
 ```
 
 `name` and `version` have no `#[serde(default)]` — both are mandatory once a
-`[package]` table is present at all.
+`[package]` table is present at all. The four legacy-support fields all have
+serde defaults, so a pre-0.6.0 manifest parses and builds identically.
+
+### Legacy support — `source_dir`, `include_dirs`, `defines`, `ignore_warnings`
+
+These four fields let deft build C/C++ trees that don't follow its strict
+layout, without moving any files. Every default reproduces the 0.5.0 behavior.
+
+- **`source_dir`** (default `"src"`) — the directory deft scans for sources and
+  the entry point. `deft build --from <path>` overrides it for a single
+  invocation; precedence is `--from` > `source_dir` > `"src"`. The entry point
+  still has to be `main.<ext>` or `lib.<ext>` — only the directory changes.
+- **`include_dirs`** (default `[]`) — extra header search paths (relative to the
+  package root), emitted as `-I<path>` and searched before dependency headers.
+- **`defines`** (default `[]`) — project-wide preprocessor defines applied to
+  **both** C and C++ units as `-D<entry>`, additive to the per-language
+  `[profile]` `defines`.
+- **`ignore_warnings`** (default `false`) — inject `-w` to disable every warning.
+  `deft build --ignore-warnings` does the same from the CLI. `-w` overrides the
+  profile's `-W` groups but not `extra_flags`, and is never applied to
+  `deft check`.
+
+The scanner and entry-point discovery accept `.c`, `.cpp`, `.cc`, `.cxx`, and
+`.C`; a capital `.C` is **C++** (Unix/Clang convention). `.c` compiles with
+`clang`, every C++ extension with `clang++`. The single-language rule is
+unchanged — a package mixing C and C++ is still rejected.
 
 ### `toolchain` — pinning the active compiler
 
