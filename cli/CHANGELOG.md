@@ -29,6 +29,11 @@ A correctness release around dependency versioning.
   depends on the standalone repo the normal way (`"gh:xntas/json" = "3.12.0"`),
   with its `deft.lock` pinned to that tag's commit. (The example no longer
   vendors json into `third_party/`.)
+- **The registry index now lives at `website/static/deft-libs`.** `deft sync`'s
+  default URL is `raw.githubusercontent.com/xntas/deft/main/website/static/deft-libs`
+  (still overridable via `DEFT_LIBS_URL`). One file, two consumers: the CLI
+  fetches it, and the website serves it (at `/deft-libs`) and renders its entries
+  on the **Packages** page — so the registry and the site can never drift.
 
 ## [0.7.0] - 2026-07-22
 
@@ -103,9 +108,9 @@ the layout — without you rearranging a single file. Every default reproduces
   (history preserved) under `cli/`, `website/`, and `examples/example-app/`. The
   website's Cloudflare Pages deployment now builds from the `website/`
   subdirectory. (The `json` library keeps its own repo — see 0.7.1.)
-- **Package index moved into the monorepo.** `deft sync`'s default index URL is
-  now `raw.githubusercontent.com/xntas/deft/main/deft-libs` (the flat-text
-  `deft-libs` file at the repo root), still overridable via `DEFT_LIBS_URL`.
+- **Package index moved into the monorepo.** `deft sync`'s default index URL
+  points at the `deft-libs` file inside `xntas/deft`, still overridable via
+  `DEFT_LIBS_URL`. (Its exact path is refined in 0.7.1.)
 
 ### Notes
 

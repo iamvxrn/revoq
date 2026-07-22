@@ -9,3 +9,5 @@
 # Examples:
 # gh:user/http_parser          https://github.com/user/http_parser.git
 # gh:another_user/ssl_helper   https://github.com/another_user/ssl_helper.git
+
+gh:xntas/json                  https://github.com/xntas/json.git

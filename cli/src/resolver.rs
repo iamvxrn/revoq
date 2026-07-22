@@ -396,7 +396,8 @@ impl Resolver {
 
 /// Default location of the flat-text package index. Overridable via
 /// `DEFT_LIBS_URL` for self-hosted or air-gapped registries.
-const DEFT_LIBS_INDEX_URL: &str = "https://raw.githubusercontent.com/xntas/deft/main/deft-libs";
+const DEFT_LIBS_INDEX_URL: &str =
+    "https://raw.githubusercontent.com/xntas/deft/main/website/static/deft-libs";
 
 /// Fetch `url` into `dest` using only OS-native tools — no HTTP crate.
 fn fetch_to_file(url: &str, dest: &Path) -> Result<()> {

@@ -1,15 +1,9 @@
 ---
 title: "Packages"
-lead: "Community packages live in their own repositories — pull them in by GitHub shorthand."
+lead: "The deft registry — pull any of these in by shorthand in deft.toml."
 ---
 
-# Nothing to list yet
-
-There's no package registry to browse yet. In the meantime, any deft-standard
-repo works as a dependency — just point at it by shorthand in `deft.toml`:
-
-```toml
-[dependencies]
-"gh:user/some_lib" = "1.5"
-```
-
+deft's registry is a single flat-text file,
+[`deft-libs`](/deft-libs), that maps a shorthand to a repository URL. `gh:user/repo`
+shorthands resolve to GitHub on their own, so the index only carries entries whose
+URL can't be guessed from the name. The table below is that file, rendered.
