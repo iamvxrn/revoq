@@ -2,7 +2,7 @@
 name = "deft"
 version = "0.7.0"
 edition = "2021"
-authors = ["deft contributors"]
+authors = ["deft contributors", "Claude"]
 description = """A modern package manager and build system for C and C++, with strict
 project-layout enforcement and deep Clang integration."""
 license = "MIT"

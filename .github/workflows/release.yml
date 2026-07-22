@@ -16,8 +16,30 @@ permissions:
   contents: write
 
 jobs:
+  # Historical tags (v0.3.0–v0.6.0) point at pre-monorepo commits that have no
+  # cli/ crate — those releases are backfilled source-only by
+  # scripts/backfill-releases.sh, not built here. This gate lets their tag
+  # pushes no-op cleanly instead of failing a build that can't run.
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    outputs:
+      buildable: ${{ steps.check.outputs.buildable }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f cli/Cargo.toml ]; then
+            echo "buildable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "buildable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::historical tag without a cli/ crate — skipping binary build."
+          fi
+
   build:
     name: build ${{ matrix.target }}
+    needs: gate
+    if: needs.gate.outputs.buildable == 'true'
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -93,7 +115,8 @@ jobs:
 
   release:
     name: publish release
-    needs: build
+    needs: [gate, build]
+    if: needs.gate.outputs.buildable == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
