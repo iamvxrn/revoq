@@ -23,12 +23,58 @@ use crate::manifest::{Manifest, Package};
 use crate::resolver;
 use crate::trace;
 
-/// What kind of artifact a package produces, decided by which entry file the
-/// strict layout contains.
+/// What kind of artifact a package produces. Normally decided by which entry
+/// file the layout contains (`main.*` → executable, `lib.*` → library), but
+/// overridable via `[package] kind` for legacy trees whose sources aren't
+/// canonically named (0.7.0).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Crate {
     Executable,
     Library,
+}
+
+impl Crate {
+    /// Parse a `[package] kind` string. Accepts the common spellings for each.
+    pub fn parse(raw: &str) -> Result<Crate> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "bin" | "exe" | "executable" | "binary" => Ok(Crate::Executable),
+            "lib" | "library" | "staticlib" | "static" => Ok(Crate::Library),
+            other => Err(DeftError::Config(format!(
+                "unknown [package] kind '{other}' (expected 'bin' or 'lib')"
+            ))),
+        }
+    }
+}
+
+/// How to locate and scan a package's sources. Bundles the legacy-support
+/// knobs so `discover` doesn't grow a parameter per manifest field.
+#[derive(Debug, Clone, Default)]
+pub struct ScanConfig {
+    /// Sources directory relative to the package root (`[package] source_dir`
+    /// or `deft build --from`); the default `"src"` reproduces strict layout.
+    pub source_dir: String,
+    /// Explicit artifact kind (`[package] kind`). When set, deft skips
+    /// canonical-entry discovery entirely, so a directory of arbitrarily-named
+    /// sources (`cJSON.c`, `format.cc`) builds without a `main.*`/`lib.*` file.
+    pub kind: Option<Crate>,
+    /// `[package] include` globs (relative to `source_dir`): when non-empty,
+    /// only matching files are compiled.
+    pub include: Vec<String>,
+    /// `[package] exclude` globs (relative to `source_dir`): pruned from the
+    /// scan so a vendored repo's `tests/`/`examples/`/fuzzers stay out.
+    pub exclude: Vec<String>,
+}
+
+impl ScanConfig {
+    /// The strict default: scan `src/`, infer kind from the entry file, no
+    /// globs. Convenient for the few call sites that don't carry a manifest.
+    #[allow(dead_code)] // used by tests; real call sites build ScanConfig from the manifest
+    pub fn strict(source_dir: &str) -> ScanConfig {
+        ScanConfig {
+            source_dir: source_dir.to_string(),
+            ..ScanConfig::default()
+        }
+    }
 }
 
 /// The discovered, validated layout of a single package.
@@ -39,90 +85,111 @@ pub struct Layout {
     #[allow(dead_code)]
     pub root: PathBuf,
     pub src: PathBuf,
-    /// Kept for future diagnostics that report the exact entry file found.
+    /// The canonical entry file, when one was found. `None` for a
+    /// `kind`-driven package whose sources are arbitrarily named.
     #[allow(dead_code)]
-    pub entry: PathBuf,
+    pub entry: Option<PathBuf>,
     pub entry_language: Language,
     pub crate_kind: Crate,
+    /// Scan globs carried from `ScanConfig` so `collect_sources` filters the
+    /// tree exactly the way discovery did.
+    include: Vec<String>,
+    exclude: Vec<String>,
 }
 
 impl Layout {
-    /// Enforce deft's strict layout. deft does NOT glob for the entry point:
-    /// it must be a `main.<ext>` (executable) or `lib.<ext>` (library) file
-    /// with a recognized C/C++ extension.
+    /// Locate and validate a package's layout.
     ///
-    /// Precedence: an executable entry (`main`) wins over a library entry if
-    /// both somehow exist, because a package with `main.*` is runnable. Within
-    /// each stem, the canonical `.cpp`/`.c` are tried first, then the legacy
-    /// extensions (`.cc`, `.cxx`, `.C`, `.c++`, `.cp`) — so a stock project is
-    /// resolved byte-for-byte as before, while legacy trees whose entry is,
-    /// say, `main.C` or `main.cxx` are also accepted (0.6.0 legacy support).
-    /// The single-language rule (enforced in `collect_sources`) is unchanged.
+    /// The strict path (no `kind`, default `source_dir`, no globs) is
+    /// unchanged from earlier releases: the entry point must be a canonically
+    /// named `main.<ext>` (executable) or `lib.<ext>` (library), with `main`
+    /// winning over `lib`, and the canonical `.cpp`/`.c` tried before the
+    /// legacy `.cc`/`.cxx`/`.C` extensions.
     ///
-    /// `source_dir` is the sources directory relative to `root`, normally
-    /// `"src"` (the manifest default), but overridable via `[package]
-    /// source_dir` or `deft build --from <path>` for legacy trees whose
-    /// sources don't live under `src/`.
-    pub fn discover(root: &Path, source_dir: &str) -> Result<Layout> {
-        let src = root.join(source_dir);
+    /// Legacy escape hatches (0.6/0.7): `source_dir` redirects where deft
+    /// looks; `include`/`exclude` globs narrow the scan; and `kind` removes
+    /// the canonical-entry requirement entirely — with `kind` set, deft
+    /// determines the language from the scanned sources and builds them as the
+    /// declared artifact, so a real library named `cJSON.c` builds as-is. The
+    /// one-language-per-package rule is unchanged throughout.
+    pub fn discover(root: &Path, cfg: &ScanConfig) -> Result<Layout> {
+        let src = root.join(&cfg.source_dir);
         if !src.is_dir() {
             return Err(DeftError::LayoutViolation(format!(
-                "missing '{source_dir}/' source directory under {}",
+                "missing '{}/' source directory under {}",
+                cfg.source_dir,
                 root.display()
             )));
         }
 
-        // Canonical extensions first, then legacy ones — the language is
-        // derived from the extension via the single source of truth,
-        // `Language::from_extension`, so entry routing and per-unit routing
-        // can never disagree (notably `.C` == C++).
-        const ENTRY_EXTS: [&str; 7] = ["cpp", "c", "cc", "cxx", "C", "c++", "cp"];
-        for (stem, kind) in [("main", Crate::Executable), ("lib", Crate::Library)] {
-            for ext in ENTRY_EXTS {
-                let entry = src.join(format!("{stem}.{ext}"));
-                if entry.is_file() {
-                    let lang = Language::from_extension(&entry).expect("ENTRY_EXTS are recognized");
-                    return Ok(Layout {
-                        root: root.to_path_buf(),
-                        src,
-                        entry,
-                        entry_language: lang,
-                        crate_kind: kind,
-                    });
-                }
-            }
-        }
+        // Canonical entry discovery — the backward-compatible fast path. Only
+        // consulted when the manifest hasn't already declared `kind`.
+        let canonical = if cfg.kind.is_none() {
+            find_canonical_entry(&src)
+        } else {
+            None
+        };
 
-        Err(DeftError::LayoutViolation(format!(
-            "no entry point found: expected {sd}/main.<ext> (executable) or \
-             {sd}/lib.<ext> (library) with a C/C++ extension \
-             (.c, .cpp, .cc, .cxx, .C) under {}",
-            root.display(),
-            sd = source_dir
-        )))
+        let (entry, crate_kind, entry_language) = match canonical {
+            Some((entry, kind, lang)) => (Some(entry), kind, lang),
+            None => {
+                // No canonical entry: the kind must be declared, and the
+                // language is inferred from whatever sources the scan finds.
+                let kind = cfg.kind.ok_or_else(|| {
+                    DeftError::LayoutViolation(format!(
+                        "no entry point found under {sd}/ and no [package] kind declared. \
+                         Either add {sd}/main.<ext> or {sd}/lib.<ext>, or set \
+                         kind = \"bin\" | \"lib\" in [package] to build a directory of \
+                         arbitrarily-named sources.",
+                        sd = cfg.source_dir
+                    ))
+                })?;
+                let lang = infer_language(&src, &cfg.include, &cfg.exclude)?;
+                (None, kind, lang)
+            }
+        };
+
+        Ok(Layout {
+            root: root.to_path_buf(),
+            src,
+            entry,
+            entry_language,
+            crate_kind,
+            include: cfg.include.clone(),
+            exclude: cfg.exclude.clone(),
+        })
     }
 
     /// Verify a directory is a valid deft-standard package (manifest + layout).
-    pub fn assert_deft_standard(root: &Path, source_dir: &str) -> Result<Layout> {
+    pub fn assert_deft_standard(root: &Path, cfg: &ScanConfig) -> Result<Layout> {
         if !root.join("deft.toml").is_file() {
             return Err(DeftError::NotDeftStandard {
                 path: root.to_path_buf(),
                 reason: "missing deft.toml manifest".to_string(),
             });
         }
-        Layout::discover(root, source_dir).map_err(|e| DeftError::NotDeftStandard {
+        Layout::discover(root, cfg).map_err(|e| DeftError::NotDeftStandard {
             path: root.to_path_buf(),
             reason: e.to_string(),
         })
     }
 
-    /// Gather every compilable translation unit under `src/`, respecting the
-    /// strict single-language rule: the entry language dictates which sources
-    /// are eligible. Mixing C and C++ in one package is forbidden.
+    /// Gather every compilable translation unit under `source_dir`, honoring
+    /// the `include`/`exclude` globs and the strict single-language rule: the
+    /// package's language dictates which sources are eligible, and finding the
+    /// *other* language is an error. A deft package is single-language.
     pub fn collect_sources(&self) -> Result<Vec<PathBuf>> {
+        let scanned = scan_sources(&self.src, &self.include, &self.exclude)?;
+
         let mut sources = Vec::new();
         let mut foreign = Vec::new();
-        collect_sources_rec(&self.src, &mut sources, &mut foreign, self.entry_language)?;
+        for path in scanned {
+            match Language::from_extension(&path) {
+                Some(l) if l == self.entry_language => sources.push(path),
+                Some(_) => foreign.push(path),
+                None => {}
+            }
+        }
 
         if !foreign.is_empty() {
             let other = match self.entry_language {
@@ -142,27 +209,102 @@ impl Layout {
         sources.sort();
         Ok(sources)
     }
+
+    /// A copy of this layout forced to build as a library. Dependencies are
+    /// always archived and linked into the consumer regardless of whether they
+    /// expose a `main.*` entry of their own.
+    pub fn as_library(&self) -> Layout {
+        Layout {
+            crate_kind: Crate::Library,
+            ..self.clone()
+        }
+    }
 }
 
-/// Recursively collect sources matching `lang`; record mismatches in `foreign`.
-fn collect_sources_rec(
-    dir: &Path,
-    matching: &mut Vec<PathBuf>,
-    foreign: &mut Vec<PathBuf>,
-    lang: Language,
-) -> Result<()> {
-    let entries = fs::read_dir(dir).path_ctx(dir)?;
-    for entry in entries {
-        let entry = entry.path_ctx(dir)?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_sources_rec(&path, matching, foreign, lang)?;
-        } else if let Some(found) = Language::from_extension(&path) {
-            if found == lang {
-                matching.push(path);
-            } else {
-                foreign.push(path);
+/// Look for a canonically named entry file directly under `src`.
+///
+/// Precedence: an executable entry (`main`) wins over a library entry, and
+/// within each stem the canonical `.cpp`/`.c` are tried before the legacy
+/// extensions. The language is derived from the extension via the single
+/// source of truth, `Language::from_extension`, so entry routing and per-unit
+/// routing can never disagree (notably `.C` == C++).
+fn find_canonical_entry(src: &Path) -> Option<(PathBuf, Crate, Language)> {
+    const ENTRY_EXTS: [&str; 7] = ["cpp", "c", "cc", "cxx", "C", "c++", "cp"];
+    for (stem, kind) in [("main", Crate::Executable), ("lib", Crate::Library)] {
+        for ext in ENTRY_EXTS {
+            let entry = src.join(format!("{stem}.{ext}"));
+            if entry.is_file() {
+                let lang = Language::from_extension(&entry).expect("ENTRY_EXTS are recognized");
+                return Some((entry, kind, lang));
             }
+        }
+    }
+    None
+}
+
+/// Determine a `kind`-driven package's language from its (glob-filtered)
+/// sources. Exactly one language must be present; both is a single-language
+/// violation, and none is a "nothing to build" error.
+fn infer_language(src: &Path, include: &[String], exclude: &[String]) -> Result<Language> {
+    let scanned = scan_sources(src, include, exclude)?;
+    let mut c_file = None;
+    let mut cpp_file = None;
+    for path in &scanned {
+        match Language::from_extension(path) {
+            Some(Language::C) => c_file.get_or_insert(path.clone()),
+            Some(Language::Cpp) => cpp_file.get_or_insert(path.clone()),
+            None => continue,
+        };
+    }
+    match (c_file, cpp_file) {
+        (Some(_), Some(cpp)) => Err(DeftError::LayoutViolation(format!(
+            "strict C/C++ separation violated: this package mixes C and C++ sources \
+             (e.g. '{}'). A deft package is single-language — split it, or narrow the \
+             scan with [package] include/exclude.",
+            cpp.display()
+        ))),
+        (Some(_), None) => Ok(Language::C),
+        (None, Some(_)) => Ok(Language::Cpp),
+        (None, None) => Err(DeftError::LayoutViolation(format!(
+            "no compilable C/C++ sources found under {} (after include/exclude filters)",
+            src.display()
+        ))),
+    }
+}
+
+/// Recursively collect every recognized C/C++ source under `src`, honoring the
+/// `include`/`exclude` globs. `exclude` prunes whole directories (so an
+/// excluded `tests/` is never descended into); `include`, when non-empty,
+/// keeps only matching files. Patterns match `/`-separated, `src`-relative
+/// paths.
+fn scan_sources(src: &Path, include: &[String], exclude: &[String]) -> Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    scan_rec(src, src, include, exclude, &mut out)?;
+    out.sort();
+    Ok(out)
+}
+
+fn scan_rec(
+    base: &Path,
+    dir: &Path,
+    include: &[String],
+    exclude: &[String],
+    out: &mut Vec<PathBuf>,
+) -> Result<()> {
+    for entry in fs::read_dir(dir).path_ctx(dir)? {
+        let path = entry.path_ctx(dir)?.path();
+        let rel = path.strip_prefix(base).unwrap_or(&path);
+        let rel_glob = rel.to_string_lossy().replace('\\', "/");
+
+        if crate::glob::matches_any(exclude, &rel_glob) {
+            continue; // prunes directories as well as files
+        }
+        if path.is_dir() {
+            scan_rec(base, &path, include, exclude, out)?;
+        } else if Language::from_extension(&path).is_some()
+            && (include.is_empty() || crate::glob::matches_any(include, &rel_glob))
+        {
+            out.push(path);
         }
     }
     Ok(())
@@ -1014,7 +1156,7 @@ mod tests {
             "int deft_add(int a, int b) { return a + b; }\n",
         )
         .unwrap();
-        let layout = Layout::discover(dir, "src").unwrap();
+        let layout = Layout::discover(dir, &ScanConfig::strict("src")).unwrap();
         let package = Package {
             name: name.to_string(),
             version: "0.1.0".to_string(),
@@ -1026,6 +1168,9 @@ mod tests {
             include_dirs: Vec::new(),
             defines: Vec::new(),
             ignore_warnings: false,
+            kind: None,
+            include: Vec::new(),
+            exclude: Vec::new(),
         };
         (layout, package)
     }
@@ -1042,9 +1187,9 @@ mod tests {
         fs::write(legacy.join("main.c"), "int main(void){return 0;}\n").unwrap();
 
         // Default "src" doesn't exist -> layout violation.
-        assert!(Layout::discover(&tmp, "src").is_err());
+        assert!(Layout::discover(&tmp, &ScanConfig::strict("src")).is_err());
         // Pointed at the real directory -> discovered as an executable.
-        let layout = Layout::discover(&tmp, "legacy").unwrap();
+        let layout = Layout::discover(&tmp, &ScanConfig::strict("legacy")).unwrap();
         assert_eq!(layout.crate_kind, Crate::Executable);
         assert_eq!(layout.entry_language, Language::C);
 
@@ -1061,10 +1206,74 @@ mod tests {
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("main.C"), "int main(){return 0;}\n").unwrap();
 
-        let layout = Layout::discover(&tmp, "src").unwrap();
+        let layout = Layout::discover(&tmp, &ScanConfig::strict("src")).unwrap();
         assert_eq!(layout.crate_kind, Crate::Executable);
         assert_eq!(layout.entry_language, Language::Cpp);
-        assert_eq!(layout.entry.file_name().unwrap(), "main.C");
+        assert_eq!(layout.entry.unwrap().file_name().unwrap(), "main.C");
+
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// 0.7 — `[package] kind` removes the canonical-entry requirement: a
+    /// directory of arbitrarily-named sources (no `main.*`/`lib.*`) builds as
+    /// the declared kind, with the language inferred from the sources.
+    #[test]
+    fn kind_lib_builds_arbitrarily_named_sources_without_a_canonical_entry() {
+        let tmp = std::env::temp_dir().join(format!("deft-kind-{}", std::process::id()));
+        let src = tmp.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("cJSON.c"), "int cjson_x(void){return 1;}\n").unwrap();
+        fs::write(src.join("util.c"), "int util_y(void){return 2;}\n").unwrap();
+
+        // Without kind (and no main/lib entry) -> helpful error.
+        assert!(Layout::discover(&tmp, &ScanConfig::strict("src")).is_err());
+
+        // With kind = lib -> accepted; language inferred as C.
+        let cfg = ScanConfig {
+            source_dir: "src".to_string(),
+            kind: Some(Crate::Library),
+            ..ScanConfig::default()
+        };
+        let layout = Layout::discover(&tmp, &cfg).unwrap();
+        assert_eq!(layout.crate_kind, Crate::Library);
+        assert_eq!(layout.entry_language, Language::C);
+        assert!(layout.entry.is_none());
+        assert_eq!(layout.collect_sources().unwrap().len(), 2);
+
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// 0.7 — `exclude` globs prune a vendored repo's tests/fuzzers so they
+    /// aren't swept into the library; `include` further narrows the scan.
+    #[test]
+    fn exclude_and_include_globs_narrow_the_scan() {
+        let tmp = std::env::temp_dir().join(format!("deft-glob-{}", std::process::id()));
+        let root = tmp.join("proj");
+        fs::create_dir_all(root.join("tests")).unwrap();
+        fs::create_dir_all(root.join("fuzzing")).unwrap();
+        fs::write(root.join("cJSON.c"), "int a(void){return 0;}\n").unwrap();
+        fs::write(root.join("cJSON_Utils.c"), "int b(void){return 0;}\n").unwrap();
+        fs::write(root.join("tests/test.c"), "int main(void){return 0;}\n").unwrap();
+        fs::write(root.join("fuzzing/fuzz.c"), "int c(void){return 0;}\n").unwrap();
+
+        // source_dir = "." with kind = lib, excluding tests + fuzzers.
+        let cfg = ScanConfig {
+            source_dir: ".".to_string(),
+            kind: Some(Crate::Library),
+            include: Vec::new(),
+            exclude: vec!["tests/**".to_string(), "fuzzing/**".to_string()],
+        };
+        let layout = Layout::discover(&root, &cfg).unwrap();
+        let sources = layout.collect_sources().unwrap();
+        assert_eq!(
+            sources.len(),
+            2,
+            "only the two library sources survive the exclude"
+        );
+        assert!(sources.iter().all(|p| {
+            let s = p.to_string_lossy();
+            !s.contains("tests") && !s.contains("fuzzing")
+        }));
 
         fs::remove_dir_all(&tmp).ok();
     }

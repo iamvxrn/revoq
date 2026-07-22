@@ -97,6 +97,26 @@ pub struct Package {
     /// manifest.
     #[serde(default)]
     pub ignore_warnings: bool,
+
+    // --- Legacy support (0.7.0) ------------------------------------------
+    /// Artifact kind: `"bin"` (executable) or `"lib"` (library). When set,
+    /// deft no longer requires a canonically-named `main.*`/`lib.*` entry
+    /// file — real libraries whose sources are named `cJSON.c` or `format.cc`
+    /// build as-is. Unset (the default) keeps the strict behavior: the entry
+    /// file's name decides the kind. Accepts `bin`/`exe`/`executable` and
+    /// `lib`/`library` (see `Crate::parse`).
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Glob patterns (relative to `source_dir`) that restrict the scan: when
+    /// non-empty, only matching files are compiled. Default `[]` = scan
+    /// everything. Syntax: `*`, `?`, and `**` (see `glob.rs`).
+    #[serde(default)]
+    pub include: Vec<String>,
+    /// Glob patterns (relative to `source_dir`) pruned from the scan, so a
+    /// vendored repo's `tests/`, `examples/`, and fuzzers don't get compiled
+    /// into your library. Default `[]`. Applied after `include`.
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 /// `[profile.c]` and `[profile.cpp]`.
@@ -495,6 +515,31 @@ mod tests {
         assert_eq!(pkg.include_dirs, vec!["legacy/include", "vendor/include"]);
         assert_eq!(pkg.defines, vec!["LEGACY", "VERSION=2"]);
         assert!(pkg.ignore_warnings);
+    }
+
+    #[test]
+    fn package_kind_and_scan_globs_parse_and_default() {
+        // Absent (pre-0.7.0): kind None, no globs.
+        let bare: Manifest =
+            toml::from_str("[package]\nname = \"p\"\nversion = \"0.1.0\"\n").unwrap();
+        let pkg = bare.package.unwrap();
+        assert_eq!(pkg.kind, None);
+        assert!(pkg.include.is_empty());
+        assert!(pkg.exclude.is_empty());
+
+        let m: Manifest = toml::from_str(
+            "[package]\n\
+             name = \"cjson\"\n\
+             version = \"1.7.18\"\n\
+             kind = \"lib\"\n\
+             include = [\"*.c\"]\n\
+             exclude = [\"tests/**\", \"fuzzing/**\"]\n",
+        )
+        .unwrap();
+        let pkg = m.package.unwrap();
+        assert_eq!(pkg.kind.as_deref(), Some("lib"));
+        assert_eq!(pkg.include, vec!["*.c"]);
+        assert_eq!(pkg.exclude, vec!["tests/**", "fuzzing/**"]);
     }
 
     #[test]

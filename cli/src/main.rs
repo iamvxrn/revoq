@@ -10,6 +10,7 @@ mod compiler;
 mod doctor;
 mod engine;
 mod error;
+mod glob;
 mod hash;
 mod json;
 mod manifest;
@@ -23,7 +24,7 @@ use std::time::Instant;
 
 use cli::{BuildArgs, CheckArgs, Cli, Command as Cmd, InitArgs, RunArgs, UpdateArgs, VendorArgs};
 use compiler::Compiler;
-use engine::{default_jobs, require_package, Crate, Engine, Layout};
+use engine::{default_jobs, require_package, Crate, Engine, Layout, ScanConfig};
 use error::{DeftError, IoPathExt, Result};
 use json::Json;
 use manifest::{Lockfile, Manifest, Package, ToolchainSpec};
@@ -222,8 +223,8 @@ fn build_single(
     // (and the CLI `--from` override) can redirect where deft looks for the
     // entry point — legacy trees whose sources don't live under `src/`.
     let package = require_package(manifest, root)?;
-    let source_dir = effective_source_dir(args.from.as_deref(), &package);
-    let layout = Layout::assert_deft_standard(root, &source_dir)?;
+    let scan = scan_config(args.from.as_deref(), &package)?;
+    let layout = Layout::assert_deft_standard(root, &scan)?;
 
     // --- Toolchain pin (opt-in; skipped entirely when unset, preserving the
     // hot-path guarantee documented in architecture.md) -------------------
@@ -430,7 +431,8 @@ fn build_dependencies(
         // (a dependency may itself be a legacy-layout package).
         let dep_manifest = Manifest::load(&dep.cache_path)?;
         let dep_package = require_package(&dep_manifest, &dep.cache_path)?;
-        let dep_layout = Layout::assert_deft_standard(&dep.cache_path, &dep_package.source_dir)?;
+        let dep_scan = scan_config(None, &dep_package)?;
+        let dep_layout = Layout::assert_deft_standard(&dep.cache_path, &dep_scan)?;
 
         if !quiet {
             println!(
@@ -463,10 +465,7 @@ fn build_dependencies(
         let engine = Engine::new(jobs(args), verbose, quiet, json, false);
 
         // Force library output for dependencies even if they expose main.*.
-        let lib_layout = Layout {
-            crate_kind: Crate::Library,
-            ..dep_layout.clone()
-        };
+        let lib_layout = dep_layout.as_library();
         let built = engine.build_package(
             &lib_layout,
             &dep_package,
@@ -530,8 +529,8 @@ fn cmd_check(args: CheckArgs, verbose: bool, quiet: bool) -> Result<()> {
     let manifest = Manifest::load(&root)?;
     let package = require_package(&manifest, &root)?;
     // `deft check` has no `--from`; it honors the manifest's `source_dir`.
-    let source_dir = effective_source_dir(None, &package);
-    let layout = Layout::assert_deft_standard(&root, &source_dir)?;
+    let scan = scan_config(None, &package)?;
+    let layout = Layout::assert_deft_standard(&root, &scan)?;
 
     let resolved = match vendored_dependencies(&root, &manifest)? {
         Some(vendored) => vendored,
@@ -811,6 +810,23 @@ fn effective_source_dir(cli_from: Option<&Path>, pkg: &Package) -> String {
     cli_from
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|| pkg.source_dir.clone())
+}
+
+/// Assemble the source-scan configuration for a package from its manifest and
+/// the CLI `--from` override: the effective source dir, the optional
+/// `[package] kind` (parsed and validated here so a bad value fails before any
+/// filesystem work), and the `include`/`exclude` globs.
+fn scan_config(cli_from: Option<&Path>, pkg: &Package) -> Result<ScanConfig> {
+    let kind = match &pkg.kind {
+        Some(k) => Some(Crate::parse(k)?),
+        None => None,
+    };
+    Ok(ScanConfig {
+        source_dir: effective_source_dir(cli_from, pkg),
+        kind,
+        include: pkg.include.clone(),
+        exclude: pkg.exclude.clone(),
+    })
 }
 
 /// The package's extra `[package] include_dirs`, resolved relative to its

@@ -5,6 +5,42 @@ All notable changes to this project.
 > deft is an experiment in what an AI can build for the C/C++ tooling world —
 > "Cargo, but for C and C++." Useful, not production-hardened.
 
+## [0.7.0] - 2026-07-22
+
+The **migration** release. 0.6 let deft build "almost-canonical" trees; 0.7
+removes the two barriers that still forced you to restructure a real CMake
+project by hand. Tested against cJSON and fmt: both now build from a handful of
+manifest lines, no files moved. Strict defaults are unchanged — a stock
+`deft init` project builds byte-for-byte as before.
+
+### Added
+
+- **`[package] kind`** (`"bin"` / `"lib"`) — drop the requirement for a
+  canonically named `main.*`/`lib.*` entry file. With `kind` set, deft builds a
+  directory of arbitrarily-named sources (a real library's `cJSON.c`,
+  `format.cc`) as the declared artifact, inferring the language from the sources.
+  Unset keeps the strict entry-file behavior. Accepts `bin`/`exe`/`executable`
+  and `lib`/`library`.
+- **`[package] include` / `exclude`** — glob patterns (relative to
+  `source_dir`) that narrow the scan, so pointing `source_dir` at a repo root no
+  longer drags its `tests/`, `examples/`, and fuzzers into your library.
+  `exclude` prunes whole directories; `include`, when set, keeps only matching
+  files. A small dependency-free matcher (`src/glob.rs`) supports `*`, `?`, and
+  `**` — no new crate, in keeping with deft's zero-dependency stance.
+
+### Changed
+
+- Source discovery now runs through a single `ScanConfig` and a glob-aware
+  scanner. The canonical-entry fast path is untouched (and still wins when no
+  `kind` is declared), so existing projects resolve exactly as before; the
+  entry file is now optional rather than required.
+
+### Notes
+
+- The one-language-per-package rule still holds: a `kind`-driven package that
+  mixes C and C++ sources is rejected, with the same guidance to split it or
+  narrow the scan with `include`/`exclude`.
+
 ## [0.6.0] - 2026-07-22
 
 The **Legacy Support** release. deft stays strict by default, but a handful of

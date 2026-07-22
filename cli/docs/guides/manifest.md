@@ -38,11 +38,14 @@ authors = ["optional", "list"]
 toolchain = "clang-18.1"   # optional
 target = "aarch64-unknown-linux-gnu"   # optional
 
-# Legacy support (0.6.0) — all optional, all default to the strict behavior:
-source_dir      = "src"                       # where sources live
-include_dirs    = ["legacy/include"]          # extra -I paths
-defines         = ["HAVE_CONFIG_H", "N=64"]   # project-wide -D (C and C++)
-ignore_warnings = false                       # true injects -w
+# Legacy support — all optional, all default to the strict behavior:
+source_dir      = "src"                       # where sources live       (0.6)
+include_dirs    = ["legacy/include"]          # extra -I paths           (0.6)
+defines         = ["HAVE_CONFIG_H", "N=64"]   # project-wide -D          (0.6)
+ignore_warnings = false                       # true injects -w          (0.6)
+kind            = "lib"                        # "bin"/"lib"; skip entry  (0.7)
+include         = ["*.c"]                      # scan-narrowing globs     (0.7)
+exclude         = ["tests/**", "fuzzing/**"]  # pruned from the scan     (0.7)
 ```
 
 ```rust
@@ -58,12 +61,16 @@ pub struct Package {
     pub include_dirs: Vec<String>,    // default: []
     pub defines: Vec<String>,         // default: []
     pub ignore_warnings: bool,        // default: false
+    // --- legacy support (0.7.0) ---
+    pub kind: Option<String>,         // default: None ("bin"/"lib")
+    pub include: Vec<String>,         // default: []
+    pub exclude: Vec<String>,         // default: []
 }
 ```
 
 `name` and `version` have no `#[serde(default)]` — both are mandatory once a
-`[package]` table is present at all. The four legacy-support fields all have
-serde defaults, so a pre-0.6.0 manifest parses and builds identically.
+`[package]` table is present at all. Every legacy-support field has a serde
+default, so a pre-0.6.0 manifest parses and builds identically.
 
 ### Legacy support — `source_dir`, `include_dirs`, `defines`, `ignore_warnings`
 
@@ -96,12 +103,52 @@ deft's strict layout, without moving any files. Every default reproduces the
   final word. It is deliberately never emitted on the `deft check` analysis
   path — suppressing warnings there would defeat the purpose.
 
-**Extensions.** The scanner (`collect_sources`) and entry-point discovery accept
-`.c`, `.cpp`, `.cc`, `.cxx`, and `.C`. A capital `.C` is **C++** (Unix/Clang
-convention), handled case-sensitively in `Language::from_extension`
+**Extensions.** The scanner and entry-point discovery accept `.c`, `.cpp`,
+`.cc`, `.cxx`, and `.C`. A capital `.C` is **C++** (Unix/Clang convention),
+handled case-sensitively in `Language::from_extension`
 ([compiler.rs](../src/compiler.rs)) before any lowercasing. Routing is unchanged:
-`.c` → `clang`, every C++ extension → `clang++`. The single-language rule is
-unchanged too — a package mixing C and C++ sources is still rejected.
+`.c` → `clang`, every C++ extension → `clang++`.
+
+### Legacy support (0.7) — `kind`, `include`, `exclude`
+
+0.6 handles trees that are *almost* canonical. 0.7 adds the two knobs that let
+you build a real third-party project without moving a single file — the same two
+that a CMake migration otherwise trips on.
+
+- **`kind`** (`"bin"` or `"lib"`, default unset) — drops the requirement for a
+  canonically named entry file. deft's entry file only ever did two things:
+  decide bin-vs-lib and pick the language. Declare `kind` and the first is
+  explicit; the language is then inferred from the scanned sources
+  (`Layout::discover` → `infer_language` in [engine.rs](../src/engine.rs)). So a
+  library whose sources are `cJSON.c` / `cJSON_Utils.c` — no `lib.c` in sight —
+  builds as-is. Leave `kind` unset and the strict `main.*`/`lib.*` discovery is
+  exactly as before.
+- **`include` / `exclude`** (default `[]`) — glob patterns, relative to
+  `source_dir`, that narrow what the scanner compiles. `exclude` prunes whole
+  directories (an excluded `tests/` is never descended into); `include`, when
+  non-empty, keeps only matching files. The matcher (`src/glob.rs`) supports
+  `*` and `?` (within one path segment) and `**` (spanning zero or more
+  segments), so `tests/**`, `**/*_test.c`, and `*.pb.cc` all work. This is what
+  makes `source_dir = "."` usable on a repo that keeps tests and fuzzers beside
+  its library sources.
+
+The single-language rule holds throughout: a `kind`-driven package that turns up
+both C and C++ sources is rejected, with the same advice to split it or narrow
+the scan with `include`/`exclude`.
+
+A full example — vendoring cJSON with nothing moved:
+
+```toml
+[package]
+name       = "cjson"
+version    = "1.7.18"
+kind       = "lib"                       # sources are cJSON.c, not lib.c
+source_dir = "."                         # they sit at the repo root
+exclude    = ["tests/**", "fuzzing/**"]  # keep the test suite out
+
+[profile.c]
+standard = "c89"
+```
 
 ### `toolchain` — pinning the active compiler
 

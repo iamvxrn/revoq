@@ -4,7 +4,7 @@
 <h6>Cargo, but for C and C++. Strict project layout, Clang doing the heavy
 lifting, and builds you can actually reproduce.</h6>
 
-[![Deft Version](https://img.shields.io/badge/version-0.6.0-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/xntas/deft/releases/tag/v0.6.0)
+[![Deft Version](https://img.shields.io/badge/version-0.7.0-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/xntas/deft/releases/tag/v0.7.0)
 [![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg?style=for-the-badge&labelColor=000000&color=ffffff)](#)
 
 </div>
@@ -275,6 +275,13 @@ defines = ["HAVE_CONFIG_H", "MAX_CONN=64"]
 
 # Building someone else's noisy code? Silence every warning with -w.
 ignore_warnings = true
+
+# Sources aren't named main.*/lib.*? Say what to build and deft stops
+# needing a canonical entry file (0.7).
+kind = "lib"
+
+# Narrow the scan so tests/examples/fuzzers don't get compiled in (0.7).
+exclude = ["tests/**", "fuzzing/**"]
 ```
 
 A few things worth knowing:
@@ -282,19 +289,36 @@ A few things worth knowing:
 - **`source_dir`** defaults to `"src"`. `deft build --from <path>` overrides it
   from the command line without touching the manifest — handy for a one-off build
   of a tree whose layout you'd rather not commit to.
-- **The entry point is still `main.*` or `lib.*`**, but the extension can now be
-  any of `.c`, `.cpp`, `.cc`, `.cxx`, or `.C`, not just `.cpp`/`.c`. So a legacy
-  `src/main.cxx` or `src/main.C` gets found and built.
-- **A capital `.C` means C++**, per the long-standing Unix/Clang convention.
-  Routing is otherwise unchanged: `.c` compiles with `clang`, everything else
-  with `clang++`.
+- **`kind` frees you from the `main`/`lib` entry name.** A real library's files
+  are called `cJSON.c` or `format.cc`, never `lib.c`. Set `kind = "lib"` (or
+  `"bin"`) and deft builds the directory as that artifact, working out the
+  language from the sources — no entry file, no renaming. Leave `kind` off and
+  the strict entry-file discovery is exactly as it was.
+- **`include` / `exclude` glob the scan.** Point `source_dir` at a whole repo
+  and `exclude = ["tests/**", "fuzzing/**"]` keeps its test suite out of your
+  build; `include` narrows it the other way. Patterns understand `*`, `?`, and
+  `**`.
+- **Entry extensions are flexible too:** `main`/`lib` entries may be `.c`,
+  `.cpp`, `.cc`, `.cxx`, or `.C`. A capital `.C` is **C++** (Unix/Clang
+  convention). Routing is unchanged: `.c` → `clang`, everything else → `clang++`.
 - **`--ignore-warnings`** is the CLI twin of `ignore_warnings`; either one turns
   warnings off. It's blunt (`-w` disables *everything*), so reach for per-warning
   control in `[profile]` `warnings`/`extra_flags` when you can.
 
-The one-language rule still holds: a C package with a stray `.cpp` (or a C++
-package with a stray `.c`) is still an error. Mixing the two silently is exactly
-how ABI bugs are born.
+The one-language rule still holds: a package that mixes C and C++ sources is an
+error. Mixing the two silently is exactly how ABI bugs are born.
+
+**Migrating a real project?** For instance, vendoring cJSON — whose sources sit
+at the repo root beside its tests — takes a five-line manifest and moves nothing:
+
+```toml
+[package]
+name       = "cjson"
+version    = "1.7.18"
+kind       = "lib"
+source_dir = "."
+exclude    = ["tests/**", "fuzzing/**"]
+```
 
 ## Static analysis (`deft check`)
 
