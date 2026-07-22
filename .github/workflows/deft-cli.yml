@@ -1,9 +1,15 @@
-name: CI
+name: CLI
 
 on:
   push:
     branches: [main, develop]
+    paths:
+      - "cli/**"
+      - ".github/workflows/deft-cli.yml"
   pull_request:
+    paths:
+      - "cli/**"
+      - ".github/workflows/deft-cli.yml"
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,6 +18,11 @@ jobs:
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Monorepo: the CLI crate lives in cli/. All `run:` steps below execute
+    # there, so cargo finds Cargo.toml without an explicit --manifest-path.
+    defaults:
+      run:
+        working-directory: cli
     strategy:
       fail-fast: false
       matrix:
@@ -26,6 +37,8 @@ jobs:
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
 
       # --- Toolchain: clang / llvm-ar (Linux) -----------------------------
       - name: Install clang + LLVM (Linux)
