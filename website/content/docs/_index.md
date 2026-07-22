@@ -2,39 +2,42 @@
 title: "Documentation"
 ---
 
-## Getting Started with Deft
+## Getting started
 
-This guide will help you set up and build your first C/C++ project using Deft in less than a minute. Before proceeding, ensure that `clang` is installed on your system and the `deft` binary is accessible in your system's `PATH`. You can verify your environment at any time by running `deft doctor`.
+This walks you from an empty directory to a running C/C++ project in about a
+minute. You'll need `clang` installed and the `deft` binary on your `PATH`. Not
+sure your setup is good? Run `deft doctor` any time — it checks the whole
+toolchain for you.
 
-### 1. Initialize a New Project
+### 1. Start a project
 
-Deft eliminates the need for complex, handwritten build scripts. To scaffold a new project, create an empty directory and initialize it with a single command:
+No build script to hand-write. Make a directory and initialize it:
 
 ```bash
 mkdir my_project
 cd my_project
 
-# Initializes a standard C++ executable project by default
+# Defaults to a C++ executable
 deft init
-
 ```
 
-*To initialize a pure C project or a static library instead, use the explicit flags: `deft init --c` or `deft init --lib`.*
+Want a C project or a static library instead? Use `deft init --c` or
+`deft init --lib`.
 
-### 2. Project Layout Enforcements
+### 2. The layout
 
-Deft enforces a strict, predictable directory structure inspired by Cargo. This design eliminates configuration sprawl. Your initialized project will look like this:
+deft borrows Cargo's idea of a fixed, predictable layout, so there's nothing to
+configure about where files go. A fresh project looks like this:
 
 ```text
 my_project/
 ├── src/
-│   └── main.cpp  # The canonical entry point for a C++ executable
-├── .gitignore    # Automatically generated to exclude the target/ directory
-└── deft.toml     # The minimalist package manifest
-
+│   └── main.cpp  # the entry point for a C++ executable
+├── .gitignore    # generated, ignores target/
+└── deft.toml     # the manifest
 ```
 
-The generated `deft.toml` contains basic configuration metadata and strict language profiles:
+And `deft.toml` starts small:
 
 ```toml
 [package]
@@ -45,67 +48,72 @@ version = "0.2.0"
 standard = "c++20"
 warnings = ["all", "extra"]
 optimization = "0"
-
 ```
 
-> **Strict Layout Rule:** Deft packages are single-language only. If the compilation engine detects a foreign source file (such as a `.c` file inside a C++ package) during `Layout::collect_sources`, the build will immediately abort with a `LayoutViolation` error.
+> **One language per package.** deft won't let a package mix C and C++. Drop a
+> `.c` file into a C++ package and the build stops with a `LayoutViolation`
+> rather than quietly compiling it with the wrong flags. (Building a legacy tree
+> that doesn't fit? See the manifest guide's Legacy Support section.)
 
-### 3. Build the Project
+### 3. Build
 
-To compile your application, run the build command from the project root:
+From the project root:
 
 ```bash
 deft build
-
 ```
 
-Deft automatically discovers all translation units inside `src/`, schedules them across an optimized internal thread pool, and invokes the compiler driver. Thanks to the *Trusted Hot-Path* execution model, subsequent incremental builds take **under 0.02 seconds** because environment checking is completely decoupled from the build pipeline.
+deft finds every source under `src/`, spreads the work across an internal thread
+pool, and calls the compiler. One nice consequence of how it's built: a
+successful build never pays for environment checks — deft only runs its `doctor`
+diagnostics when a build actually *fails*, so the happy path stays lean.
 
-All compiled binaries and objects are isolated within the `target/` directory:
+Everything it produces lands in `target/`:
 
-* **Unix-like systems:** `target/debug/my_project`
-* **Windows systems:** `target/debug/my_project.exe`
+* **Unix:** `target/debug/my_project`
+* **Windows:** `target/debug/my_project.exe`
 
-To compile a production-ready binary with aggressive `-O3` optimizations, disabled debug symbols, and the `-DNDEBUG` macro active, pass the release flag:
+For an optimized build — `-O3`, no debug symbols, `-DNDEBUG` — add `--release`:
 
 ```bash
 deft build --release
-
 ```
 
-### 4. Run the Executable
+### 4. Run
 
-You can compile and immediately execute your project's binary using a single command:
+Build and run in one step:
 
 ```bash
 deft run
-
 ```
 
-If you need to pass arguments directly to your underlying compiled executable, use the standard double-dash `--` separator:
+Need to pass arguments to *your* program rather than to deft? Put them after
+`--`:
 
 ```bash
 deft run -- --port 8080 --verbose
-
 ```
 
-*All arguments following the `--` token are captured greedily and forwarded verbatim to the launched child process.*
+Everything after `--` is forwarded to your executable untouched.
 
-### 5. Add Dependencies
+### 5. Add a dependency
 
-Deft manages external dependencies securely without tracking heavy git submodules or vendoring raw header files. To declare a dependency, add its GitHub shorthand to the `[dependencies]` table inside your `deft.toml`:
+deft pulls dependencies without git submodules or vendored headers. Add a GitHub
+shorthand to the `[dependencies]` table:
 
 ```toml
 [dependencies]
 "gh:user/network_lib" = "1.5"
-
 ```
 
-To pull the dependency and freeze its state, execute:
+Then fetch and lock it:
 
 ```bash
 deft update
-
 ```
 
-Deft invokes the host OS utilities atomically to clone the repository into the global cache directory (`~/.deft/cache/`), resolves the specific tag, and pins the exact commit SHA inside `deft.lock` to guarantee reproducible builds across different development environments. The dependency is automatically compiled as a static library (`.a` / `.lib`) and linked into your artifact during the next `deft build`.
+Under the hood, deft clones the repo into its global cache (`~/.deft/cache/`),
+resolves the tag you asked for, and pins the exact commit in `deft.lock` so the
+build is the same on every machine. From the next `deft build` on, the dependency
+is compiled to a static library (`.a` / `.lib`) and linked into your binary
+automatically.

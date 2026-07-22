@@ -2,8 +2,20 @@
 title: "Code of Conduct"
 ---
 
-## Enforcement Responsibilities and Contact
+deft is a small, friendly project, and the short version is: be decent to each
+other. Bring good faith, assume it in others, and keep it constructive — even
+when you disagree.
 
-Project maintainers are responsible for clarifying and enforcing the standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
+## What's not okay
 
-Inception and violations of this Code of Conduct may be reported directly to the project maintainer under the pseudonym **xntas** at **xntas@proton.me**. All complaints will be reviewed and investigated promptly and fairly.
+Harassment, threats, personal attacks, or behavior meant to demean or exclude
+someone. If it would make a reasonable person feel unsafe or unwelcome, don't.
+
+## Enforcement and contact
+
+The maintainer is responsible for keeping this space healthy and will step in
+with fair, proportionate action when someone crosses the line.
+
+If something happens — to you or to someone else — you can report it directly and
+in confidence to the maintainer, **xntas**, at **xntas@proton.me**. Every report
+is read, taken seriously, and looked into promptly and fairly.
