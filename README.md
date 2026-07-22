@@ -4,10 +4,17 @@
 <h6>A modern package manager and build system for C and C++, with strict
 project-layout enforcement and deep Clang integration.</h6>
 
-[![Deft Version](https://img.shields.io/badge/version-0.5.0-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/deft-cli/deft/releases/tag/v0.5.0)
+[![Deft Version](https://img.shields.io/badge/version-0.6.0-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/xntas/deft/releases/tag/v0.6.0)
 [![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg?style=for-the-badge&labelColor=000000&color=ffffff)](#)
 
 </div>
+
+> **Heads up — deft is an experiment, not a product.** It started as a question:
+> if you handed an AI the idea "Cargo, but for C and C++," how far could it get?
+> Everything here — the resolver, the Clang integration, the docs you're reading
+> — came out of that. It works, and we use it on toy projects, but it hasn't
+> earned your production build yet. Treat it as a study of what AI can build in
+> the C/C++ tooling space, and kick the tires accordingly.
 
 ## Why deft?
 
@@ -245,6 +252,54 @@ surfaces as clang's own error the moment it's invoked, the same way an
 invalid `extra_flags` entry would. See
 [docs/guides/manifest.md](docs/guides/manifest.md#target--cross-compilation)
 for the full resolution/priority rules.
+
+## Legacy Support
+
+deft is opinionated on purpose: sources live in `src/`, the entry point is
+`main`/`lib`, one package speaks one language. That's great for new projects and
+miserable for the twenty-year-old tree you were handed on a Friday afternoon. The
+`[package]` fields below are the escape hatches that let you point deft at code
+you didn't write without rearranging any of it. Leave them out and nothing
+changes — every default reproduces the strict 0.5.0 behavior exactly.
+
+```toml
+[package]
+name    = "vendored_thing"
+version = "0.6.0"
+
+# Sources aren't under src/? Say where they are.
+source_dir = "source"
+
+# Public headers live somewhere non-obvious? Add them to the include path.
+# Resolved relative to the package root; searched before dependency headers.
+include_dirs = ["legacy/include", "third_party/zlib"]
+
+# Project-wide -D defines, applied to BOTH C and C++ units. Additive to the
+# per-language `defines` under [profile.c] / [profile.cpp].
+defines = ["HAVE_CONFIG_H", "MAX_CONN=64"]
+
+# Building someone else's noisy code? Silence every warning with -w.
+ignore_warnings = true
+```
+
+A few things worth knowing:
+
+- **`source_dir`** defaults to `"src"`. `deft build --from <path>` overrides it
+  from the command line without touching the manifest — handy for a one-off build
+  of a tree whose layout you don't want to commit to.
+- **The entry point still has to be `main.*` or `lib.*`**, but the extension can
+  now be any of `.c`, `.cpp`, `.cc`, `.cxx`, or `.C` — not just `.cpp`/`.c`. So a
+  legacy `src/main.cxx` or `src/main.C` is found and built.
+- **`.C` (capital) is C++**, following the long-standing Unix/Clang convention.
+  Extension routing is unchanged otherwise: `.c` compiles with `clang`,
+  everything else with `clang++`.
+- **`--ignore-warnings`** is the CLI twin of `ignore_warnings`; either one turns
+  warnings off. It's a blunt instrument (`-w` disables *everything*) — reach for
+  per-warning control in `[profile]` `warnings`/`extra_flags` when you can.
+
+The single-language rule still holds: a C package containing a stray `.cpp` (or a
+C++ package with a stray `.c`) is still an error, because mixing the two silently
+is how ABI bugs are born.
 
 ## Static analysis (`deft check`)
 

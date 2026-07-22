@@ -26,7 +26,7 @@ use compiler::Compiler;
 use engine::{default_jobs, require_package, Crate, Engine, Layout};
 use error::{DeftError, IoPathExt, Result};
 use json::Json;
-use manifest::{Lockfile, Manifest, ToolchainSpec};
+use manifest::{Lockfile, Manifest, Package, ToolchainSpec};
 use resolver::{build_lockfile, package_name, ResolvedDep, Resolver};
 
 fn main() {
@@ -218,8 +218,12 @@ fn build_single(
     quiet: bool,
     json: bool,
 ) -> Result<BuildOutcome> {
-    let layout = Layout::assert_deft_standard(root)?;
+    // `require_package` runs before layout discovery so `[package] source_dir`
+    // (and the CLI `--from` override) can redirect where deft looks for the
+    // entry point — legacy trees whose sources don't live under `src/`.
     let package = require_package(manifest, root)?;
+    let source_dir = effective_source_dir(args.from.as_deref(), &package);
+    let layout = Layout::assert_deft_standard(root, &source_dir)?;
 
     // --- Toolchain pin (opt-in; skipped entirely when unset, preserving the
     // hot-path guarantee documented in architecture.md) -------------------
@@ -279,15 +283,22 @@ fn build_single(
         );
     }
 
+    // Package-level `include_dirs` (legacy support) search first, then
+    // dependency headers.
+    let mut include_dirs = package_include_dirs(root, &package);
+    include_dirs.extend(dep_includes);
+
     let compiler = Compiler::new(
         manifest.profile.c.clone().unwrap_or_default(),
         manifest.profile.cpp.clone().unwrap_or_default(),
         root,
-        dep_includes,
+        include_dirs,
         &features,
         args.release,
         args.trace,
         target,
+        package.defines.clone(),
+        args.ignore_warnings || package.ignore_warnings,
     );
 
     let engine = Engine::new(jobs(args), verbose, quiet, json, args.trace);
@@ -386,8 +397,8 @@ fn build_workspace(
         last = Some(outcome);
     }
 
-    let mut outcome = last
-        .ok_or_else(|| DeftError::LayoutViolation("workspace has no members to build".into()))?;
+    let mut outcome =
+        last.ok_or_else(|| DeftError::LayoutViolation("workspace has no members to build".into()))?;
     outcome.compile_commands = all_compile_commands;
     Ok(outcome)
 }
@@ -414,10 +425,12 @@ fn build_dependencies(
     let mut compile_commands = Vec::new();
 
     for dep in resolved {
-        // Each dependency must itself be deft-standard.
-        let dep_layout = Layout::assert_deft_standard(&dep.cache_path)?;
+        // Each dependency must itself be deft-standard. Load its manifest
+        // first so its own `[package] source_dir` can steer layout discovery
+        // (a dependency may itself be a legacy-layout package).
         let dep_manifest = Manifest::load(&dep.cache_path)?;
         let dep_package = require_package(&dep_manifest, &dep.cache_path)?;
+        let dep_layout = Layout::assert_deft_standard(&dep.cache_path, &dep_package.source_dir)?;
 
         if !quiet {
             println!(
@@ -437,11 +450,13 @@ fn build_dependencies(
             dep_manifest.profile.c.clone().unwrap_or_default(),
             dep_manifest.profile.cpp.clone().unwrap_or_default(),
             &dep.cache_path,
-            Vec::new(),
+            package_include_dirs(&dep.cache_path, &dep_package),
             &dep_features,
             args.release,
             false,
             cross_target.map(|t| t.to_string()),
+            dep_package.defines.clone(),
+            dep_package.ignore_warnings,
         );
 
         let dep_target = dep.cache_path.join("target");
@@ -513,7 +528,10 @@ fn cmd_run(args: RunArgs, verbose: bool, quiet: bool) -> Result<()> {
 fn cmd_check(args: CheckArgs, verbose: bool, quiet: bool) -> Result<()> {
     let root = project_root(args.manifest_path.as_deref())?;
     let manifest = Manifest::load(&root)?;
-    let layout = Layout::assert_deft_standard(&root)?;
+    let package = require_package(&manifest, &root)?;
+    // `deft check` has no `--from`; it honors the manifest's `source_dir`.
+    let source_dir = effective_source_dir(None, &package);
+    let layout = Layout::assert_deft_standard(&root, &source_dir)?;
 
     let resolved = match vendored_dependencies(&root, &manifest)? {
         Some(vendored) => vendored,
@@ -523,10 +541,12 @@ fn cmd_check(args: CheckArgs, verbose: bool, quiet: bool) -> Result<()> {
             resolver.resolve_all(&manifest, existing_lock.as_ref())?
         }
     };
-    let dep_includes: Vec<PathBuf> = resolved
-        .iter()
-        .flat_map(|dep| [dep.cache_path.join("src"), dep.cache_path.join("include")])
-        .collect();
+    let mut include_dirs = package_include_dirs(&root, &package);
+    include_dirs.extend(
+        resolved
+            .iter()
+            .flat_map(|dep| [dep.cache_path.join("src"), dep.cache_path.join("include")]),
+    );
 
     let features = manifest.resolve_features(&args.features, args.no_default_features);
     let target = effective_target(args.target.as_deref(), &manifest);
@@ -535,11 +555,13 @@ fn cmd_check(args: CheckArgs, verbose: bool, quiet: bool) -> Result<()> {
         manifest.profile.c.clone().unwrap_or_default(),
         manifest.profile.cpp.clone().unwrap_or_default(),
         &root,
-        dep_includes,
+        include_dirs,
         &features,
         false, // release: irrelevant — analysis never reaches codegen.
         false, // trace: irrelevant — no compilation happens to profile.
         target,
+        package.defines.clone(),
+        package.ignore_warnings,
     );
 
     let engine = Engine::new(resolve_jobs(args.jobs), verbose, quiet, false, false);
@@ -779,6 +801,24 @@ fn effective_target(cli_target: Option<&str>, manifest: &Manifest) -> Option<Str
     cli_target
         .map(|t| t.to_string())
         .or_else(|| manifest.package.as_ref().and_then(|p| p.target.clone()))
+}
+
+/// Resolve the sources directory to scan (legacy support). Precedence:
+/// `deft build --from <path>` > `[package] source_dir` > `"src"`. The serde
+/// default already collapses the last two into `pkg.source_dir`, so this only
+/// has to layer the CLI override on top.
+fn effective_source_dir(cli_from: Option<&Path>, pkg: &Package) -> String {
+    cli_from
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|| pkg.source_dir.clone())
+}
+
+/// The package's extra `[package] include_dirs`, resolved relative to its
+/// root and prepended to whatever include paths the caller already has
+/// (dependency headers). Legacy layouts keep public headers outside
+/// `include/`; this is how those directories reach clang as `-I<path>`.
+fn package_include_dirs(root: &Path, pkg: &Package) -> Vec<PathBuf> {
+    pkg.include_dirs.iter().map(|d| root.join(d)).collect()
 }
 
 fn short_sha(sha: &str) -> &str {

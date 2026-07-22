@@ -122,6 +122,19 @@ pub struct BuildArgs {
     /// the `[package] target` manifest field when both are set.
     #[arg(long, value_name = "TRIPLE")]
     pub target: Option<String>,
+
+    /// Scan this directory for sources instead of the manifest's
+    /// `[package] source_dir` (which itself defaults to `src`). Legacy escape
+    /// hatch: build a tree whose sources don't live under `src/` without
+    /// editing the manifest. Overrides `source_dir` when both are set.
+    #[arg(long, value_name = "PATH")]
+    pub from: Option<PathBuf>,
+
+    /// Suppress all compiler warnings by injecting `-w`. Turns warnings off
+    /// regardless of the `[package] ignore_warnings` manifest field — a blunt
+    /// tool for building noisy legacy code you don't own.
+    #[arg(long)]
+    pub ignore_warnings: bool,
 }
 
 /// Arguments for `deft check`.
@@ -301,14 +314,57 @@ mod tests {
             other => panic!("expected Command::Build, got {other:?}"),
         }
 
-        let cli =
-            Cli::try_parse_from(["deft", "build", "--target", "aarch64-unknown-linux-gnu"])
-                .unwrap();
+        let cli = Cli::try_parse_from(["deft", "build", "--target", "aarch64-unknown-linux-gnu"])
+            .unwrap();
         match cli.command {
             Command::Build(args) => {
                 assert_eq!(args.target.as_deref(), Some("aarch64-unknown-linux-gnu"))
             }
             other => panic!("expected Command::Build, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_from_and_ignore_warnings_default_off_and_parse_when_given() {
+        let cli = Cli::try_parse_from(["deft", "build"]).unwrap();
+        match cli.command {
+            Command::Build(args) => {
+                assert_eq!(args.from, None);
+                assert!(!args.ignore_warnings);
+            }
+            other => panic!("expected Command::Build, got {other:?}"),
+        }
+
+        let cli =
+            Cli::try_parse_from(["deft", "build", "--from", "legacy/src", "--ignore-warnings"])
+                .unwrap();
+        match cli.command {
+            Command::Build(args) => {
+                assert_eq!(
+                    args.from.as_deref(),
+                    Some(std::path::Path::new("legacy/src"))
+                );
+                assert!(args.ignore_warnings);
+            }
+            other => panic!("expected Command::Build, got {other:?}"),
+        }
+    }
+
+    /// `deft run` flattens `BuildArgs`, so the legacy build flags must be
+    /// reachable through it too.
+    #[test]
+    fn run_inherits_from_and_ignore_warnings_flags() {
+        let cli =
+            Cli::try_parse_from(["deft", "run", "--from", "app", "--ignore-warnings"]).unwrap();
+        match cli.command {
+            Command::Run(args) => {
+                assert_eq!(
+                    args.build.from.as_deref(),
+                    Some(std::path::Path::new("app"))
+                );
+                assert!(args.build.ignore_warnings);
+            }
+            other => panic!("expected Command::Run, got {other:?}"),
         }
     }
 

@@ -33,7 +33,15 @@ impl Language {
     /// Returns `None` for headers and unknown extensions — those are never
     /// compiled as translation units.
     pub fn from_extension(path: &Path) -> Option<Language> {
-        let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+        let raw = path.extension()?.to_str()?;
+        // A capital `.C` is C++ by long-standing Unix convention (GCC/Clang
+        // both treat it that way). This must be checked *before* lowercasing,
+        // or `.C` would collapse into the lowercase `"c"` arm and be
+        // mis-compiled as C.
+        if raw == "C" {
+            return Some(Language::Cpp);
+        }
+        let ext = raw.to_ascii_lowercase();
         match ext.as_str() {
             "c" => Some(Language::C),
             "cc" | "cpp" | "cxx" | "c++" | "cp" => Some(Language::Cpp),
@@ -209,6 +217,13 @@ pub struct Compiler {
     include_dirs: Vec<PathBuf>,
     /// `-D` defines injected for active features, e.g. `DEFT_FEATURE_SSL`.
     feature_defines: Vec<String>,
+    /// Project-wide `-D` defines from `[package] defines`, applied to *both*
+    /// languages on top of each profile's own `defines` (legacy support).
+    package_defines: Vec<String>,
+    /// When true, inject `-w` to silence every compiler warning (`[package]
+    /// ignore_warnings` or `deft build --ignore-warnings`). A blunt escape
+    /// hatch for noisy legacy code.
+    ignore_warnings: bool,
     /// When true, append `-g` and force a debug-friendly opt floor.
     debug: bool,
     /// Release builds set NDEBUG and trust the profile's optimization level.
@@ -230,6 +245,7 @@ impl Compiler {
     /// unconditionally added to the header search path, independent of
     /// `include_dirs` (which carries *other* packages' public headers, e.g.
     /// dependencies).
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         c_profile: CProfile,
         cpp_profile: CppProfile,
@@ -239,6 +255,8 @@ impl Compiler {
         release: bool,
         trace: bool,
         target: Option<String>,
+        package_defines: Vec<String>,
+        ignore_warnings: bool,
     ) -> Compiler {
         let feature_defines = active_features
             .iter()
@@ -254,6 +272,8 @@ impl Compiler {
             own_include_dir: include_dir.canonicalize().unwrap_or(include_dir),
             include_dirs,
             feature_defines,
+            package_defines,
+            ignore_warnings,
             debug: !release,
             release,
             trace,
@@ -507,6 +527,16 @@ impl Compiler {
     ) {
         self.push_diagnostics_and_includes(args, profile_defines);
 
+        // `[package] ignore_warnings` / `--ignore-warnings`: silence every
+        // warning. Emitted here, *after* the profile's `-W` groups (pushed by
+        // `c_flags`/`cpp_flags` before this call), so `-w` overrides them —
+        // but still before `extra_flags`, leaving that escape hatch the final
+        // word. Deliberately absent from the `--analyze` path: suppressing
+        // warnings there would defeat the point of `deft check`.
+        if self.ignore_warnings {
+            args.push("-w".to_string());
+        }
+
         // `deft build --trace`: clang writes this unit's profile next to its
         // `-o` object path (same basename, `.json` extension) — see
         // trace.rs for the aggregation step that follows compilation.
@@ -545,7 +575,13 @@ impl Compiler {
         for dir in &self.include_dirs {
             args.push(format!("-I{}", dir.display()));
         }
-        for def in profile_defines.iter().chain(self.feature_defines.iter()) {
+        // Order: the profile's own `defines`, then project-wide `[package]
+        // defines` (both languages), then the auto-generated feature defines.
+        for def in profile_defines
+            .iter()
+            .chain(self.package_defines.iter())
+            .chain(self.feature_defines.iter())
+        {
             args.push(format!("-D{def}"));
         }
     }
@@ -682,6 +718,8 @@ mod tests {
             false,
             false,
             None,
+            Vec::new(),
+            false,
         )
     }
 
@@ -783,6 +821,8 @@ mod tests {
             true,
             false,
             None,
+            Vec::new(),
+            false,
         );
         let fp_release = release.cache_fingerprint(Language::C).unwrap();
 
@@ -804,6 +844,94 @@ mod tests {
         assert_eq!(Language::from_extension(Path::new("foo.h")), None);
     }
 
+    /// A capital `.C` is C++ (Unix tradition), and must not collapse into the
+    /// lowercase `.c` = C arm — otherwise a legacy C++ file would be compiled
+    /// with the C driver and mis-routed at link time.
+    #[test]
+    fn capital_c_extension_routes_to_cpp() {
+        assert_eq!(
+            Language::from_extension(Path::new("Widget.C")),
+            Some(Language::Cpp)
+        );
+        assert_eq!(
+            Language::from_extension(Path::new("Widget.C"))
+                .unwrap()
+                .driver(),
+            "clang++"
+        );
+        // Lowercase `.c` stays C.
+        assert_eq!(
+            Language::from_extension(Path::new("widget.c")),
+            Some(Language::C)
+        );
+    }
+
+    /// `[package] ignore_warnings` (and `--ignore-warnings`, which sets the
+    /// same flag) must inject a single `-w` into a real compile — after the
+    /// profile's `-W` groups so it wins — and never into the `--analyze`
+    /// path, where suppressing warnings would defeat `deft check`.
+    #[test]
+    fn ignore_warnings_injects_dash_w_into_compile_but_not_analyze() {
+        let plain = compiler();
+        assert!(!plain.c_flags().unwrap().contains(&"-w".to_string()));
+
+        let c = Compiler::new(
+            CProfile {
+                warnings: vec!["all".to_string(), "error".to_string()],
+                ..CProfile::default()
+            },
+            CppProfile::default(),
+            Path::new("."),
+            Vec::new(),
+            &[],
+            false,
+            false,
+            None,
+            Vec::new(),
+            true, // ignore_warnings
+        );
+        let flags = c.c_flags().unwrap();
+        let w_pos = flags.iter().position(|a| a == "-w").expect("-w present");
+        let wall_pos = flags
+            .iter()
+            .position(|a| a == "-Wall")
+            .expect("-Wall present");
+        assert!(wall_pos < w_pos, "-w must come after -Wall to override it");
+        assert!(c.cpp_flags().unwrap().contains(&"-w".to_string()));
+
+        // Analysis pass never suppresses warnings.
+        let unit = c.analyze_unit(Path::new("src/main.c")).unwrap();
+        assert!(!unit.args.contains(&"-w".to_string()));
+    }
+
+    /// `[package] defines` become `-D<entry>` for *both* languages, on top of
+    /// each profile's own defines, and must change the cache fingerprint (they
+    /// affect codegen).
+    #[test]
+    fn package_defines_reach_both_languages_and_the_fingerprint() {
+        let c = Compiler::new(
+            CProfile::default(),
+            CppProfile::default(),
+            Path::new("."),
+            Vec::new(),
+            &[],
+            false,
+            false,
+            None,
+            vec!["LEGACY".to_string(), "VERSION=2".to_string()],
+            false,
+        );
+        for flags in [c.c_flags().unwrap(), c.cpp_flags().unwrap()] {
+            assert!(flags.contains(&"-DLEGACY".to_string()));
+            assert!(flags.contains(&"-DVERSION=2".to_string()));
+        }
+        assert_ne!(
+            compiler().c_flags().unwrap(),
+            c.c_flags().unwrap(),
+            "package defines must alter the flags/fingerprint"
+        );
+    }
+
     #[test]
     fn sanitizer_parse_accepts_all_four_and_rejects_unknown() {
         assert_eq!(Sanitizer::parse("address").unwrap(), Sanitizer::Address);
@@ -823,6 +951,8 @@ mod tests {
             false,
             false,
             None,
+            Vec::new(),
+            false,
         )
     }
 
@@ -977,6 +1107,8 @@ mod tests {
             false,
             true,
             None,
+            Vec::new(),
+            false,
         );
         assert!(with_trace
             .c_flags()
@@ -998,6 +1130,8 @@ mod tests {
             false,
             false,
             Some(target.to_string()),
+            Vec::new(),
+            false,
         )
     }
 
@@ -1079,6 +1213,8 @@ mod tests {
             false,
             false,
             Some("aarch64-unknown-linux-gnu".to_string()),
+            Vec::new(),
+            false,
         );
         let unit = c.analyze_unit(Path::new("src/main.c")).unwrap();
 

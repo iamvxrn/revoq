@@ -2,6 +2,53 @@
 
 All notable changes to this project.
 
+> deft is an experiment in what an AI can build for the C/C++ tooling world —
+> "Cargo, but for C and C++." Useful, not production-hardened.
+
+## [0.6.0] - 2026-07-22
+
+The **Legacy Support** release. deft stays strict by default, but a handful of
+opt-in `[package]` fields now let it build real-world trees that don't follow
+the layout — without you rearranging a single file. Every default reproduces
+0.5.0 behavior byte-for-byte.
+
+### Added
+
+- **`[package] source_dir`** — the directory deft scans for sources. Defaults to
+  `"src"`, so existing manifests are unaffected. For legacy trees whose code
+  lives elsewhere.
+- **`deft build --from <path>`** — override `source_dir` from the command line
+  for a one-off build (also inherited by `deft run`). Precedence:
+  `--from` > `[package] source_dir` > `"src"`.
+- **`[package] include_dirs`** — extra header search directories (relative to
+  the package root), emitted as `-I<path>` to every translation unit, searched
+  before dependency headers.
+- **`[package] defines`** — project-wide preprocessor defines applied to *both*
+  C and C++ units as `-D<entry>`, additive to the per-language
+  `[profile.c]`/`[profile.cpp]` `defines`.
+- **`[package] ignore_warnings`** and **`deft build --ignore-warnings`** — inject
+  `-w` to silence every compiler warning; a blunt escape hatch for noisy code
+  you don't own. Either the manifest field or the CLI flag turns it on.
+- **Extended source/entry extensions.** The scanner and entry-point discovery
+  now accept `.c`, `.cpp`, `.cc`, `.cxx`, and `.C` (the entry point can be
+  `main`/`lib` with any of these). A capital `.C` is treated as **C++**, per
+  Unix/Clang convention. `.c` still routes to `clang`, everything else to
+  `clang++`.
+
+### Changed
+
+- **New home: the project is now a monorepo at `github.com/xntas/deft`.** The
+  former `deft-cli/{deft,website,example-app,json}` repositories are
+  consolidated (history preserved) under `cli/`, `website/`,
+  `examples/example-app/`, and `libs/json/`. The website's Cloudflare Pages
+  deployment now builds from the `website/` subdirectory of the monorepo.
+
+### Notes
+
+- The single-language rule is unchanged: a package containing both C and C++
+  sources is still rejected. Legacy support widens *where* and *what* deft
+  looks for, not the one-package-one-language invariant.
+
 ## [0.5.0] - 2026-07-02
 
 ### Added

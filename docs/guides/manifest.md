@@ -37,6 +37,12 @@ description = "optional"
 authors = ["optional", "list"]
 toolchain = "clang-18.1"   # optional
 target = "aarch64-unknown-linux-gnu"   # optional
+
+# Legacy support (0.6.0) — all optional, all default to the strict behavior:
+source_dir      = "src"                       # where sources live
+include_dirs    = ["legacy/include"]          # extra -I paths
+defines         = ["HAVE_CONFIG_H", "N=64"]   # project-wide -D (C and C++)
+ignore_warnings = false                       # true injects -w
 ```
 
 ```rust
@@ -47,11 +53,55 @@ pub struct Package {
     pub authors: Vec<String>,         // default: []
     pub toolchain: Option<String>,    // default: None
     pub target: Option<String>,       // default: None
+    // --- legacy support (0.6.0) ---
+    pub source_dir: String,           // default: "src"
+    pub include_dirs: Vec<String>,    // default: []
+    pub defines: Vec<String>,         // default: []
+    pub ignore_warnings: bool,        // default: false
 }
 ```
 
 `name` and `version` have no `#[serde(default)]` — both are mandatory once a
-`[package]` table is present at all.
+`[package]` table is present at all. The four legacy-support fields all have
+serde defaults, so a pre-0.6.0 manifest parses and builds identically.
+
+### Legacy support — `source_dir`, `include_dirs`, `defines`, `ignore_warnings`
+
+These four fields exist to build C/C++ trees that predate (or simply ignore)
+deft's strict layout, without moving any files. Every default reproduces the
+0.5.0 behavior exactly.
+
+- **`source_dir`** (default `"src"`) — the directory, relative to the package
+  root, that deft scans for sources and looks in for the entry point.
+  `effective_source_dir` ([main.rs](../src/main.rs)) resolves the precedence
+  **`deft build --from <path>` > `source_dir` > `"src"`**, then hands the result
+  to `Layout::discover` ([engine.rs](../src/engine.rs)). The entry point still
+  has to be `main.<ext>` (executable) or `lib.<ext>` (library); only the
+  directory changes.
+- **`include_dirs`** (default `[]`) — extra header search directories, resolved
+  relative to the package root by `package_include_dirs`
+  ([main.rs](../src/main.rs)) and prepended to the include vector so they're
+  searched *before* dependency headers. They reach clang as `-I<path>` via
+  `Compiler::push_diagnostics_and_includes`, and are part of the build-cache
+  fingerprint like any other include path.
+- **`defines`** (default `[]`) — project-wide preprocessor defines (`NAME` or
+  `NAME=VALUE`) applied to **both** C and C++ translation units as `-D<entry>`.
+  This is *additive* to the per-language `[profile.c]`/`[profile.cpp]` `defines`;
+  the emission order is profile defines, then package defines, then the
+  auto-generated feature defines.
+- **`ignore_warnings`** (default `false`) — inject `-w` to disable every
+  compiler warning. `deft build --ignore-warnings` sets the same flag from the
+  CLI (either source turns it on). `-w` is emitted *after* the profile's `-W`
+  groups so it overrides them, but *before* `extra_flags`, leaving that as the
+  final word. It is deliberately never emitted on the `deft check` analysis
+  path — suppressing warnings there would defeat the purpose.
+
+**Extensions.** The scanner (`collect_sources`) and entry-point discovery accept
+`.c`, `.cpp`, `.cc`, `.cxx`, and `.C`. A capital `.C` is **C++** (Unix/Clang
+convention), handled case-sensitively in `Language::from_extension`
+([compiler.rs](../src/compiler.rs)) before any lowercasing. Routing is unchanged:
+`.c` → `clang`, every C++ extension → `clang++`. The single-language rule is
+unchanged too — a package mixing C and C++ sources is still rejected.
 
 ### `toolchain` — pinning the active compiler
 

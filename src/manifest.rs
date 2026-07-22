@@ -68,6 +68,35 @@ pub struct Package {
     /// Unset by default — a native build never sees a `--target` flag.
     #[serde(default)]
     pub target: Option<String>,
+
+    // --- Legacy support (0.6.0) ------------------------------------------
+    // The four fields below exist so legacy / non-conforming C/C++ trees can
+    // be built without restructuring. Every default reproduces pre-0.6.0
+    // behavior exactly: `source_dir = "src"`, no extra includes, no extra
+    // defines, warnings untouched.
+    /// The directory (relative to the package root) that holds the sources to
+    /// scan. Defaults to `"src"`, so an existing manifest behaves identically.
+    /// `deft build --from <path>` overrides this at the CLI (see
+    /// `effective_source_dir` in `main.rs`).
+    #[serde(default = "default_source_dir")]
+    pub source_dir: String,
+    /// Extra header search directories (relative to the package root) added as
+    /// `-I<path>` to every translation unit, on top of the package's own
+    /// `include/` and any dependency headers. For legacy layouts that keep
+    /// public headers somewhere other than `include/`.
+    #[serde(default)]
+    pub include_dirs: Vec<String>,
+    /// Project-wide preprocessor defines (`NAME` or `NAME=VALUE`) applied to
+    /// *both* C and C++ translation units as `-D<entry>`. This is additive to
+    /// the per-language `[profile.c]`/`[profile.cpp]` `defines`.
+    #[serde(default)]
+    pub defines: Vec<String>,
+    /// Suppress all compiler warnings by injecting `-w`. A blunt escape hatch
+    /// for building noisy legacy code you don't own. `deft build
+    /// --ignore-warnings` turns this on from the CLI regardless of the
+    /// manifest.
+    #[serde(default)]
+    pub ignore_warnings: bool,
 }
 
 /// `[profile.c]` and `[profile.cpp]`.
@@ -249,6 +278,9 @@ fn extract_compiler_version(output: &str) -> Option<String> {
     })
 }
 
+fn default_source_dir() -> String {
+    "src".to_string()
+}
 fn default_c_standard() -> String {
     "c17".to_string()
 }
@@ -433,6 +465,37 @@ impl Lockfile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn package_source_dir_defaults_to_src_when_absent() {
+        // A pre-0.6.0 manifest (no source_dir key) must parse with the
+        // canonical default, so legacy support stays fully opt-in.
+        let m: Manifest = toml::from_str("[package]\nname = \"p\"\nversion = \"0.1.0\"\n").unwrap();
+        let pkg = m.package.unwrap();
+        assert_eq!(pkg.source_dir, "src");
+        assert!(pkg.include_dirs.is_empty());
+        assert!(pkg.defines.is_empty());
+        assert!(!pkg.ignore_warnings);
+    }
+
+    #[test]
+    fn package_parses_legacy_support_fields() {
+        let m: Manifest = toml::from_str(
+            "[package]\n\
+             name = \"p\"\n\
+             version = \"0.1.0\"\n\
+             source_dir = \"legacy/src\"\n\
+             include_dirs = [\"legacy/include\", \"vendor/include\"]\n\
+             defines = [\"LEGACY\", \"VERSION=2\"]\n\
+             ignore_warnings = true\n",
+        )
+        .unwrap();
+        let pkg = m.package.unwrap();
+        assert_eq!(pkg.source_dir, "legacy/src");
+        assert_eq!(pkg.include_dirs, vec!["legacy/include", "vendor/include"]);
+        assert_eq!(pkg.defines, vec!["LEGACY", "VERSION=2"]);
+        assert!(pkg.ignore_warnings);
+    }
 
     #[test]
     fn toolchain_spec_parses_compiler_and_version() {

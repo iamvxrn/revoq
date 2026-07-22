@@ -63,6 +63,7 @@ there is no global/thread-local state.
 ```
 deft build [--release] [-o NAME] [-j N] [--manifest-path DIR]
             [--features A,B,C] [--no-default-features] [--trace] [--target TRIPLE]
+            [--from PATH] [--ignore-warnings]
 ```
 
 | Flag | Mechanics |
@@ -75,6 +76,8 @@ deft build [--release] [-o NAME] [-j N] [--manifest-path DIR]
 | `--no-default-features` | Boolean. Suppresses automatic inclusion of the `[features] default` set; explicitly-passed `--features` are still honored. |
 | `--trace` | Boolean. Threaded into both `Compiler::new(..., trace)` and `Engine::new(..., trace)`. See [Build profiling (`--trace`)](#build-profiling---trace) below. |
 | `--target TRIPLE` | `Option<String>`. Overrides `[package] target` when both are set. See [Cross-compilation (`--target`)](#cross-compilation---target) below. |
+| `--from PATH` | `Option<PathBuf>` (legacy support). The directory deft scans for sources and the entry point, overriding `[package] source_dir` for this invocation. `effective_source_dir` ([main.rs](../src/main.rs)) resolves **`--from` > `source_dir` > `"src"`**. Inherited by `deft run`. See [manifest.md](manifest.md#legacy-support--source_dir-include_dirs-defines-ignore_warnings). |
+| `--ignore-warnings` | Boolean (legacy support). Injects `-w` to silence every compiler warning, regardless of the `[package] ignore_warnings` field — either source turns it on. `-w` lands after the profile's `-W` groups (so it wins) but before `extra_flags`. Never applied to `deft check`. |
 
 **Toolchain pin.** If `[package] toolchain` is set (e.g. `"clang-18.1"`),
 `build_single` validates it — invoking the named compiler and checking its

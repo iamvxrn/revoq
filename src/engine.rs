@@ -47,57 +47,70 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// Enforce deft's strict layout. deft does NOT search for sources: the
-    /// entry point must be exactly one of the four canonical files.
+    /// Enforce deft's strict layout. deft does NOT glob for the entry point:
+    /// it must be a `main.<ext>` (executable) or `lib.<ext>` (library) file
+    /// with a recognized C/C++ extension.
     ///
     /// Precedence: an executable entry (`main`) wins over a library entry if
-    /// both somehow exist, because a package with `main.*` is runnable.
-    pub fn discover(root: &Path) -> Result<Layout> {
-        let src = root.join("src");
+    /// both somehow exist, because a package with `main.*` is runnable. Within
+    /// each stem, the canonical `.cpp`/`.c` are tried first, then the legacy
+    /// extensions (`.cc`, `.cxx`, `.C`, `.c++`, `.cp`) — so a stock project is
+    /// resolved byte-for-byte as before, while legacy trees whose entry is,
+    /// say, `main.C` or `main.cxx` are also accepted (0.6.0 legacy support).
+    /// The single-language rule (enforced in `collect_sources`) is unchanged.
+    ///
+    /// `source_dir` is the sources directory relative to `root`, normally
+    /// `"src"` (the manifest default), but overridable via `[package]
+    /// source_dir` or `deft build --from <path>` for legacy trees whose
+    /// sources don't live under `src/`.
+    pub fn discover(root: &Path, source_dir: &str) -> Result<Layout> {
+        let src = root.join(source_dir);
         if !src.is_dir() {
             return Err(DeftError::LayoutViolation(format!(
-                "missing 'src/' directory under {}",
+                "missing '{source_dir}/' source directory under {}",
                 root.display()
             )));
         }
 
-        // Canonical entry candidates in priority order.
-        let candidates: [(&str, Crate, Language); 4] = [
-            ("main.cpp", Crate::Executable, Language::Cpp),
-            ("main.c", Crate::Executable, Language::C),
-            ("lib.cpp", Crate::Library, Language::Cpp),
-            ("lib.c", Crate::Library, Language::C),
-        ];
-
-        for (file, kind, lang) in candidates {
-            let entry = src.join(file);
-            if entry.is_file() {
-                return Ok(Layout {
-                    root: root.to_path_buf(),
-                    src,
-                    entry,
-                    entry_language: lang,
-                    crate_kind: kind,
-                });
+        // Canonical extensions first, then legacy ones — the language is
+        // derived from the extension via the single source of truth,
+        // `Language::from_extension`, so entry routing and per-unit routing
+        // can never disagree (notably `.C` == C++).
+        const ENTRY_EXTS: [&str; 7] = ["cpp", "c", "cc", "cxx", "C", "c++", "cp"];
+        for (stem, kind) in [("main", Crate::Executable), ("lib", Crate::Library)] {
+            for ext in ENTRY_EXTS {
+                let entry = src.join(format!("{stem}.{ext}"));
+                if entry.is_file() {
+                    let lang = Language::from_extension(&entry).expect("ENTRY_EXTS are recognized");
+                    return Ok(Layout {
+                        root: root.to_path_buf(),
+                        src,
+                        entry,
+                        entry_language: lang,
+                        crate_kind: kind,
+                    });
+                }
             }
         }
 
         Err(DeftError::LayoutViolation(format!(
-            "no entry point found: expected one of src/main.cpp, src/main.c, \
-             src/lib.cpp, src/lib.c under {}",
-            root.display()
+            "no entry point found: expected {sd}/main.<ext> (executable) or \
+             {sd}/lib.<ext> (library) with a C/C++ extension \
+             (.c, .cpp, .cc, .cxx, .C) under {}",
+            root.display(),
+            sd = source_dir
         )))
     }
 
     /// Verify a directory is a valid deft-standard package (manifest + layout).
-    pub fn assert_deft_standard(root: &Path) -> Result<Layout> {
+    pub fn assert_deft_standard(root: &Path, source_dir: &str) -> Result<Layout> {
         if !root.join("deft.toml").is_file() {
             return Err(DeftError::NotDeftStandard {
                 path: root.to_path_buf(),
                 reason: "missing deft.toml manifest".to_string(),
             });
         }
-        Layout::discover(root).map_err(|e| DeftError::NotDeftStandard {
+        Layout::discover(root, source_dir).map_err(|e| DeftError::NotDeftStandard {
             path: root.to_path_buf(),
             reason: e.to_string(),
         })
@@ -1001,7 +1014,7 @@ mod tests {
             "int deft_add(int a, int b) { return a + b; }\n",
         )
         .unwrap();
-        let layout = Layout::discover(dir).unwrap();
+        let layout = Layout::discover(dir, "src").unwrap();
         let package = Package {
             name: name.to_string(),
             version: "0.1.0".to_string(),
@@ -1009,8 +1022,51 @@ mod tests {
             authors: Vec::new(),
             toolchain: None,
             target: None,
+            source_dir: "src".to_string(),
+            include_dirs: Vec::new(),
+            defines: Vec::new(),
+            ignore_warnings: false,
         };
         (layout, package)
+    }
+
+    /// A custom `source_dir` (legacy support) must be honored end-to-end: the
+    /// entry point is looked up under that directory, not the hardcoded
+    /// `src/`. A `src/`-less tree that would fail under the default must
+    /// succeed once pointed at the right directory.
+    #[test]
+    fn discover_honors_custom_source_dir_and_rejects_missing_one() {
+        let tmp = std::env::temp_dir().join(format!("deft-srcdir-{}", std::process::id()));
+        let legacy = tmp.join("legacy");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(legacy.join("main.c"), "int main(void){return 0;}\n").unwrap();
+
+        // Default "src" doesn't exist -> layout violation.
+        assert!(Layout::discover(&tmp, "src").is_err());
+        // Pointed at the real directory -> discovered as an executable.
+        let layout = Layout::discover(&tmp, "legacy").unwrap();
+        assert_eq!(layout.crate_kind, Crate::Executable);
+        assert_eq!(layout.entry_language, Language::C);
+
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// Legacy entry points with extended extensions must be discovered too: a
+    /// `main.C` is an executable whose language is C++ (capital `.C`), not just
+    /// the canonical `main.cpp`/`main.c`.
+    #[test]
+    fn discover_accepts_legacy_entry_extensions() {
+        let tmp = std::env::temp_dir().join(format!("deft-entryext-{}", std::process::id()));
+        let src = tmp.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("main.C"), "int main(){return 0;}\n").unwrap();
+
+        let layout = Layout::discover(&tmp, "src").unwrap();
+        assert_eq!(layout.crate_kind, Crate::Executable);
+        assert_eq!(layout.entry_language, Language::Cpp);
+        assert_eq!(layout.entry.file_name().unwrap(), "main.C");
+
+        fs::remove_dir_all(&tmp).ok();
     }
 
     /// End-to-end: a fresh library build must populate
@@ -1045,6 +1101,8 @@ mod tests {
             false,
             false,
             None,
+            Vec::new(),
+            false,
         );
         let engine = Engine::new(1, false, true, false, false);
         let target_dir = project.join("target");
