@@ -4,7 +4,7 @@
 
 [[dependency]]
 name = "json"
-source = "git+https://github.com/deft-cli/json.git"
-checksum = "81e91719e9c1bcd1392706779a3371d1d9839b70"
+source = "git+https://github.com/xntas/json.git"
+checksum = "39f4c5b6057d256a9d1f59ad30333ac3cd304ec9"
 version = "3.12.0"
 dependencies = []

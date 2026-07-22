@@ -162,64 +162,95 @@ impl Resolver {
         )))
     }
 
-    /// Make sure `dest` contains a clone of `url` at `tag`.
+    /// Make sure `dest` contains a clone of `url` checked out at the requested
+    /// version's tag.
     ///
-    /// If `dest` already exists and looks like a git repo, we reuse it and just
-    /// fetch + checkout the tag. Otherwise we do a fresh, shallow clone.
-    fn ensure_cached(&self, url: &str, tag: &str, dest: &Path) -> Result<()> {
+    /// `version` is what the manifest wrote (e.g. `"3.12.0"`); the real tag may
+    /// be `v`-prefixed (`v3.12.0`) or not, so we try both spellings
+    /// (`tag_candidates`). If none of them exist, that is a hard error — deft
+    /// never silently falls back to the default branch ("latest"), because a
+    /// build pinned to a version it can't actually find should fail loudly, not
+    /// quietly compile whatever HEAD happens to be.
+    fn ensure_cached(&self, url: &str, version: &str, dest: &Path) -> Result<()> {
+        let candidates = tag_candidates(version);
+
         if dest.join(".git").is_dir() {
-            self.log(&format!("reusing cached {} @ {}", url, tag));
-            // Fetch the specific tag in case the cache predates it.
-            self.git(
-                dest.parent().unwrap_or(&self.cache),
-                &[
-                    "-C",
-                    &dest.to_string_lossy(),
-                    "fetch",
-                    "--depth",
-                    "1",
-                    "origin",
-                    "tag",
-                    tag,
-                ],
-            )
-            .ok();
-            self.checkout_tag(dest, tag)?;
-            return Ok(());
+            self.log(&format!("reusing cached {} @ {}", url, version));
+            for tag in &candidates {
+                // Fetch the specific tag in case the cache predates it.
+                self.git(
+                    dest.parent().unwrap_or(&self.cache),
+                    &[
+                        "-C",
+                        &dest.to_string_lossy(),
+                        "fetch",
+                        "--depth",
+                        "1",
+                        "origin",
+                        "tag",
+                        tag,
+                    ],
+                )
+                .ok();
+                if self.checkout_tag(dest, tag).is_ok() {
+                    return Ok(());
+                }
+            }
+            return Err(DeftError::Resolution(format!(
+                "cached checkout of {url} has none of the tags {candidates:?} \
+                 (requested version '{version}')"
+            )));
         }
 
         // Probe reachability with curl before a potentially slow clone; this
         // produces a friendlier error for typo'd / private URLs.
         self.probe_url(url)?;
 
-        self.log(&format!("cloning {} @ {} -> {}", url, tag, dest.display()));
-        // Shallow clone directly at the tag for speed and determinism.
         let parent = dest.parent().unwrap_or(&self.cache);
-        let status = self.git(
-            parent,
-            &[
-                "clone",
-                "--depth",
-                "1",
-                "--branch",
-                tag,
-                url,
-                &dest.to_string_lossy(),
-            ],
-        );
 
-        // Some tags are unannotated or the host disallows `--branch <tag>` on
-        // shallow clone; fall back to a full clone + checkout.
-        if status.is_err() {
-            self.log("shallow tagged clone failed; retrying with full clone");
+        // Fast path: shallow clone directly at whichever tag spelling exists.
+        for tag in &candidates {
+            self.log(&format!("cloning {} @ {} -> {}", url, tag, dest.display()));
             if dest.exists() {
                 fs::remove_dir_all(dest).path_ctx(dest)?;
             }
-            self.git(parent, &["clone", url, &dest.to_string_lossy()])?;
-            self.checkout_tag(dest, tag)?;
+            if self
+                .git(
+                    parent,
+                    &[
+                        "clone",
+                        "--depth",
+                        "1",
+                        "--branch",
+                        tag,
+                        url,
+                        &dest.to_string_lossy(),
+                    ],
+                )
+                .is_ok()
+            {
+                return Ok(());
+            }
         }
 
-        Ok(())
+        // Fallback: one full clone (some hosts disallow `--branch <tag>` on a
+        // shallow clone, or the tag is annotated oddly), then check out a
+        // matching tag. An unmatched version is still a hard error — we never
+        // leave the tree parked on the default branch.
+        self.log("shallow tagged clone failed; retrying with full clone");
+        if dest.exists() {
+            fs::remove_dir_all(dest).path_ctx(dest)?;
+        }
+        self.git(parent, &["clone", url, &dest.to_string_lossy()])?;
+        for tag in &candidates {
+            if self.checkout_tag(dest, tag).is_ok() {
+                return Ok(());
+            }
+        }
+        Err(DeftError::Resolution(format!(
+            "none of the tags {candidates:?} exist in {url} \
+             (requested version '{version}') — check the version in your manifest"
+        )))
     }
 
     /// `git checkout <tag>` inside a repository.
@@ -365,8 +396,7 @@ impl Resolver {
 
 /// Default location of the flat-text package index. Overridable via
 /// `DEFT_LIBS_URL` for self-hosted or air-gapped registries.
-const DEFT_LIBS_INDEX_URL: &str =
-    "https://raw.githubusercontent.com/xntas/deft/main/deft-libs";
+const DEFT_LIBS_INDEX_URL: &str = "https://raw.githubusercontent.com/xntas/deft/main/deft-libs";
 
 /// Fetch `url` into `dest` using only OS-native tools — no HTTP crate.
 fn fetch_to_file(url: &str, dest: &Path) -> Result<()> {
@@ -467,6 +497,21 @@ pub fn package_name(shorthand: &str) -> String {
         .to_string()
 }
 
+/// Tag spellings to try for a requested version, in order. Manifests usually
+/// write a bare `X.Y.Z` while a lot of projects tag `vX.Y.Z` (and occasionally
+/// the reverse), so we accept either: the version as written first, then the
+/// opposite `v` prefixing. Deduped so a `v`-prefixed request doesn't retry
+/// itself.
+fn tag_candidates(version: &str) -> Vec<String> {
+    let mut out = vec![version.to_string()];
+    match version.strip_prefix('v') {
+        Some(bare) if !bare.is_empty() => out.push(bare.to_string()),
+        _ => out.push(format!("v{version}")),
+    }
+    out.dedup();
+    out
+}
+
 /// Resolve `~/.deft`, honoring `$DEFT_HOME` then `$HOME`.
 ///
 /// `pub(crate)` because the global build cache (`hash.rs`) needs the same
@@ -540,5 +585,27 @@ fn run_capture(program: &str, args: &[&str]) -> Result<String> {
             code: output.status.code(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tag_candidates_tries_both_v_prefix_spellings() {
+        // Bare version -> also try the v-prefixed tag (the common case that was
+        // silently resolving to "latest" before).
+        assert_eq!(tag_candidates("3.12.0"), vec!["3.12.0", "v3.12.0"]);
+        // Already v-prefixed -> also try the bare tag.
+        assert_eq!(tag_candidates("v3.12.0"), vec!["v3.12.0", "3.12.0"]);
+        // A lone "v" isn't a prefix worth stripping.
+        assert_eq!(tag_candidates("v"), vec!["v", "vv"]);
+    }
+
+    #[test]
+    fn package_name_takes_last_segment_without_git_suffix() {
+        assert_eq!(package_name("gh:xntas/json"), "json");
+        assert_eq!(package_name("gh:user/http_parser.git"), "http_parser");
     }
 }

@@ -5,6 +5,31 @@ All notable changes to this project.
 > deft is an experiment in what an AI can build for the C/C++ tooling world —
 > "Cargo, but for C and C++." Useful, not production-hardened.
 
+## [0.7.1] - 2026-07-22
+
+A correctness release around dependency versioning.
+
+### Fixed
+
+- **Version tags with a `v` prefix now resolve.** A manifest pinning
+  `= "3.12.0"` matches a `v3.12.0` tag (and vice-versa) — the resolver tries
+  both spellings (`tag_candidates` in `src/resolver.rs`). Previously the bare
+  spelling was passed to `git` verbatim, so a project tagged `vX.Y.Z` wouldn't
+  match.
+- **No more silent "latest" fallback.** When a pinned version matches no tag,
+  the resolve now fails with a clear error instead of full-cloning the default
+  branch and leaving the build on whatever HEAD happened to be. A version you
+  can't find is an error, not an accidental upgrade.
+
+### Changed
+
+- **`json` moved to its own repository, `github.com/xntas/json`.** A versioned
+  `gh:` dependency needs its own version tags, which a monorepo subdirectory
+  can't carry — so `libs/json/` is removed from the monorepo and the example app
+  depends on the standalone repo the normal way (`"gh:xntas/json" = "3.12.0"`),
+  with its `deft.lock` pinned to that tag's commit. (The example no longer
+  vendors json into `third_party/`.)
+
 ## [0.7.0] - 2026-07-22
 
 The **migration** release. 0.6 let deft build "almost-canonical" trees; 0.7
@@ -74,16 +99,13 @@ the layout — without you rearranging a single file. Every default reproduces
 ### Changed
 
 - **New home: the project is now a monorepo at `github.com/xntas/deft`.** The
-  former `deft-cli/{deft,website,example-app,json}` repositories are
-  consolidated (history preserved) under `cli/`, `website/`,
-  `examples/example-app/`, and `libs/json/`. The website's Cloudflare Pages
-  deployment now builds from the `website/` subdirectory of the monorepo.
+  former `deft-cli/{deft,website,example-app}` repositories are consolidated
+  (history preserved) under `cli/`, `website/`, and `examples/example-app/`. The
+  website's Cloudflare Pages deployment now builds from the `website/`
+  subdirectory. (The `json` library keeps its own repo — see 0.7.1.)
 - **Package index moved into the monorepo.** `deft sync`'s default index URL is
   now `raw.githubusercontent.com/xntas/deft/main/deft-libs` (the flat-text
-  `deft-libs` file at the repo root), still overridable via `DEFT_LIBS_URL`. The
-  example app vendors its `json` dependency into `third_party/`, so the whole
-  project is self-contained in one repository — no external `deft-cli/*` repos
-  required.
+  `deft-libs` file at the repo root), still overridable via `DEFT_LIBS_URL`.
 
 ### Notes
 

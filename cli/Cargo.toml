@@ -1,6 +1,6 @@
 [package]
 name = "deft"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 authors = ["deft contributors", "Claude"]
 description = """A modern package manager and build system for C and C++, with strict

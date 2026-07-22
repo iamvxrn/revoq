@@ -17,7 +17,11 @@ repositories, each preserving its own history:
 | [`cli/`](cli/) | The `deft` CLI — package manager + build system (Rust) | `deft-cli/deft` |
 | [`website/`](website/) | The deft website (Hugo) — deployed to Cloudflare Pages | `deft-cli/website` |
 | [`examples/example-app/`](examples/example-app/) | A minimal example project built with deft | `deft-cli/example-app` |
-| [`libs/json/`](libs/json/) | An nlohmann/json port packaged for deft | `deft-cli/json` |
+
+The `json` library stays in its **own** repo,
+[`xntas/json`](https://github.com/xntas/json) — a versioned dependency needs its
+own version tags (`v3.6.0`…`v3.12.0`), which a monorepo subdirectory can't
+carry. The example app depends on it the normal way, `"gh:xntas/json" = "3.12.0"`.
 
 ## Build the CLI
 

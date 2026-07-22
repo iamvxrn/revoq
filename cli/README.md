@@ -4,7 +4,7 @@
 <h6>Cargo, but for C and C++. Strict project layout, Clang doing the heavy
 lifting, and builds you can actually reproduce.</h6>
 
-[![Deft Version](https://img.shields.io/badge/version-0.7.0-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/xntas/deft/releases/tag/v0.7.0)
+[![Deft Version](https://img.shields.io/badge/version-0.7.1-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/xntas/deft/releases/tag/v0.7.1)
 [![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg?style=for-the-badge&labelColor=000000&color=ffffff)](#)
 
 </div>
