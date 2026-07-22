@@ -1,0 +1,11 @@
+# deft shorthand -> repository URL mapping.
+# Format: <shorthand>  <whitespace>  <url>
+# Lines beginning with '#' and blank lines are ignored.
+#
+# `gh:user/repo` shorthands resolve to https://github.com/user/repo.git
+# automatically, so they don't need an entry here — list only shorthands whose
+# URL can't be derived from the shorthand itself.
+#
+# Examples:
+# gh:user/http_parser          https://github.com/user/http_parser.git
+# gh:another_user/ssl_helper   https://github.com/another_user/ssl_helper.git

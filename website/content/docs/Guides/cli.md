@@ -444,7 +444,7 @@ explicitly to distinguish it from `deft update`.
 **Zero-dependency manifest indexing.** The index's source URL defaults to:
 
 ```
-https://raw.githubusercontent.com/deft-cli/deft-libs/main/deft-libs
+https://raw.githubusercontent.com/xntas/deft/main/deft-libs
 ```
 
 overridable via the `DEFT_LIBS_URL` environment variable (for self-hosted or

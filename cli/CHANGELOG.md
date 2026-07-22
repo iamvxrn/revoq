@@ -42,6 +42,12 @@ the layout — without you rearranging a single file. Every default reproduces
   consolidated (history preserved) under `cli/`, `website/`,
   `examples/example-app/`, and `libs/json/`. The website's Cloudflare Pages
   deployment now builds from the `website/` subdirectory of the monorepo.
+- **Package index moved into the monorepo.** `deft sync`'s default index URL is
+  now `raw.githubusercontent.com/xntas/deft/main/deft-libs` (the flat-text
+  `deft-libs` file at the repo root), still overridable via `DEFT_LIBS_URL`. The
+  example app vendors its `json` dependency into `third_party/`, so the whole
+  project is self-contained in one repository — no external `deft-cli/*` repos
+  required.
 
 ### Notes
 
