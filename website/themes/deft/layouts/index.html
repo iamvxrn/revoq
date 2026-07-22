@@ -1,0 +1,81 @@
+{{ define "main" }}
+
+<!-- Hero -->
+<section class="hero">
+    <p class="hero__eyebrow">
+        {{ .Site.Title }} {{ .Site.Params.version | default "v0.5.0" }}
+    </p>
+    <h1 class="hero__title">{{ .Site.Title }}</h1>
+    <p class="hero__sub">{{ .Site.Params.description }}.</p>
+    <div class="hero__actions">
+        <a href="/docs/" class="btn btn--primary"
+            >Get started →</a
+        >
+        <a href="/downloads/" class="btn btn--ghost">Downloads</a>
+    </div>
+    <div class="install-pill">
+        <span>cargo build --release</span>
+        <button
+            class="install-pill__copy"
+            data-copy="cargo build --release"
+        >
+            copy
+        </button>
+    </div>
+
+    <p>
+        deft is in early access. Expect bugs, breaking changes, and rough edges.
+    </p>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <p class="section-label">Why deft</p>
+  <h2 class="section-heading">Built for speed.<br>Designed for scale.</h2>
+
+  <div class="features__grid">
+    <div class="feature-card">
+      <div class="feature-card__number">01</div>
+      <div class="feature-card__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="2"/>
+          <path d="M3 9h18M9 21V9"/>
+        </svg>
+      </div>
+      <div class="feature-card__title">Strict project layout</div>
+      <div class="feature-card__body">No globbing, no guessing. The entry point is
+  exactly <code>src/main.cpp</code> / <code>src/main.c</code> (executables) or <code>src/lib.cpp</code> /
+  <code>src/lib.c</code> (libraries). Missing it fails the build immediately.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-card__number">02</div>
+      <div class="feature-card__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <div class="feature-card__title">Reproducible builds</div>
+      <div class="feature-card__body"><code>deft.lock</code> pins every dependency to an exact git
+  commit SHA, written atomically. <code>deft build</code> always honors the lock;
+  <code>deft update</code> is the only command that rewrites it.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-card__number">03</div>
+      <div class="feature-card__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </div>
+      <div class="feature-card__title">Parallel by default</div>
+      <div class="feature-card__body">A <code>std::thread</code> + <code>Mutex<VecDeque></code> + <code>mpsc</code> work
+  queue compiles translation units across all cores (<code>-j</code> to tune), streaming
+  diagnostics back as each unit finishes.</div>
+    </div>
+  </div>
+</section>
+
+
+{{ .Content }} {{ end }}
