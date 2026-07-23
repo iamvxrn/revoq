@@ -14,14 +14,34 @@
         <a href="/downloads/" class="btn btn--ghost">Downloads</a>
     </div>
     <div class="install-pill">
-        <span>curl -fsSL https://deft-cli.com/install.sh | sh</span>
+        <span id="hero-install-cmd">curl -fsSL https://deft-cli.com/install.sh | sh</span>
         <button
             class="install-pill__copy"
+            id="hero-install-copy"
             data-copy="curl -fsSL https://deft-cli.com/install.sh | sh"
         >
             copy
         </button>
     </div>
+    <script>
+        // Show the install command for the visitor's OS (PowerShell on Windows,
+        // the shell one-liner everywhere else). The copy button reads data-copy
+        // at click time, so updating it here is enough.
+        (function () {
+            var ua = navigator.userAgent || "";
+            var plat =
+                (navigator.userAgentData && navigator.userAgentData.platform) ||
+                navigator.platform ||
+                "";
+            if (/win/i.test(plat) || /windows/i.test(ua)) {
+                var cmd = "irm https://deft-cli.com/install.ps1 | iex";
+                var span = document.getElementById("hero-install-cmd");
+                var btn = document.getElementById("hero-install-copy");
+                if (span) span.textContent = cmd;
+                if (btn) btn.setAttribute("data-copy", cmd);
+            }
+        })();
+    </script>
 
     <p>
         deft is in early access. Expect bugs, breaking changes, and rough edges.
