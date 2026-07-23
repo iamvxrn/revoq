@@ -18,6 +18,7 @@ jobs:
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     # Monorepo: the CLI crate lives in cli/. All `run:` steps below execute
     # there, so cargo finds Cargo.toml without an explicit --manifest-path.
     defaults:

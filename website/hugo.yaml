@@ -27,6 +27,6 @@ menu:
       weight: 4
 
 params:
-  version: "v0.6.0"
+  version: "v0.7.2"
   description: "An experiment: Cargo-style tooling for C/C++, built to see how far AI can take it."
   tagline: "Cargo, but for C/C++. An AI experiment."

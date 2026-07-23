@@ -1,21 +1,99 @@
 {{ define "main" }}
 <div class="page">
   <h1 class="page__title">{{ .Title }}</h1>
-  <p class="page__lead">{{ .Params.lead | default "Get deft for your platform." }}</p>
+  {{ with .Params.lead }}<p class="page__lead">{{ . }}</p>{{ end }}
 
-  <div class="downloads-grid">
-    {{ range .Params.releases }}
-    <div class="download-card">
-      <p class="download-card__os">{{ .os }}</p>
-      <p class="download-card__name">{{ .name }}</p>
-      <p class="download-card__meta">{{ .version }} · {{ .arch }}</p>
-      <a href="{{ .url }}" class="btn btn--ghost">Download ↓</a>
+  <div class="install-os" id="install-os">
+    <div class="install-os__card" data-os="unix">
+      <div class="install-os__head">
+        <span class="install-os__label">macOS · Linux · WSL · Git Bash</span>
+        <span class="install-os__badge" hidden>Detected — for your system</span>
+      </div>
+      <div class="install-os__cmd">
+        <code>curl -fsSL https://deft-cli.com/install.sh | sh</code>
+        <button class="install-os__copy" type="button"
+                data-copy="curl -fsSL https://deft-cli.com/install.sh | sh">copy</button>
+      </div>
     </div>
-    {{ end }}
+
+    <div class="install-os__card" data-os="windows">
+      <div class="install-os__head">
+        <span class="install-os__label">Windows · PowerShell</span>
+        <span class="install-os__badge" hidden>Detected — for your system</span>
+      </div>
+      <div class="install-os__cmd">
+        <code>irm https://deft-cli.com/install.ps1 | iex</code>
+        <button class="install-os__copy" type="button"
+                data-copy="irm https://deft-cli.com/install.ps1 | iex">copy</button>
+      </div>
+    </div>
   </div>
 
-  <div class="prose" style="margin-top: 3rem;">
+  <div class="prose" style="margin-top: 2.5rem;">
     {{ .Content }}
   </div>
 </div>
+
+<style>
+  .install-os { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  .install-os__card {
+    border: 1px solid var(--border, #2a2a2a); border-radius: 10px;
+    padding: 1rem 1.1rem; background: var(--surface, rgba(127, 127, 127, .05));
+    order: 2;
+  }
+  .install-os__card--primary { order: 1; border-color: var(--heading, #888); }
+  .install-os__head { display: flex; align-items: center; gap: .6rem; margin-bottom: .6rem; }
+  .install-os__label { font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; opacity: .7; }
+  .install-os__badge {
+    font-size: .72rem; padding: .12rem .5rem; border-radius: 999px;
+    border: 1px solid var(--heading, #888); opacity: .9;
+  }
+  .install-os__cmd {
+    display: flex; align-items: center; gap: .75rem; justify-content: space-between;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: rgba(127, 127, 127, .10); border-radius: 7px; padding: .6rem .8rem;
+    overflow-x: auto;
+  }
+  .install-os__cmd code { white-space: nowrap; }
+  .install-os__copy {
+    flex: none; cursor: pointer; font-size: .78rem; padding: .25rem .6rem;
+    border-radius: 6px; border: 1px solid var(--border, #333); background: transparent;
+    color: inherit; opacity: .8;
+  }
+  .install-os__copy:hover { opacity: 1; }
+</style>
+
+<script>
+  (function () {
+    // Highlight and float the command for the visitor's OS to the top.
+    var ua = navigator.userAgent || "";
+    var plat =
+      (navigator.userAgentData && navigator.userAgentData.platform) ||
+      navigator.platform ||
+      "";
+    var isWindows = /win/i.test(plat) || /windows/i.test(ua);
+    var os = isWindows ? "windows" : "unix";
+
+    var wrap = document.getElementById("install-os");
+    if (wrap) {
+      var card = wrap.querySelector('.install-os__card[data-os="' + os + '"]');
+      if (card) {
+        card.classList.add("install-os__card--primary");
+        var badge = card.querySelector(".install-os__badge");
+        if (badge) badge.hidden = false;
+      }
+    }
+
+    // Copy buttons.
+    document.querySelectorAll(".install-os__copy").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        navigator.clipboard.writeText(btn.getAttribute("data-copy")).then(function () {
+          var t = btn.textContent;
+          btn.textContent = "copied";
+          setTimeout(function () { btn.textContent = t; }, 1200);
+        });
+      });
+    });
+  })();
+</script>
 {{ end }}

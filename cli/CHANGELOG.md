@@ -5,6 +5,28 @@ All notable changes to this project.
 > deft is an experiment in what an AI can build for the C/C++ tooling world —
 > "Cargo, but for C and C++." Useful, not production-hardened.
 
+## [0.7.2] - 2026-07-22
+
+### Fixed
+
+- **`.C` entry files on case-insensitive filesystems (Windows, and macOS by
+  default).** Entry-point discovery probed `src.join("main.c").is_file()`, which
+  on those systems matches a real `main.C` — so a C++ entry named `.C` was
+  mis-routed as C (and the CI test for it failed on Windows). Discovery now
+  matches the directory's *actual* filenames case-sensitively
+  (`find_canonical_entry` in `src/engine.rs`), so `.C` stays C++ everywhere.
+  Case-sensitive Linux was unaffected either way.
+
+### Repo / CI (not shipped in the binary)
+
+- Release workflow builds both macOS targets on `macos-14` (Apple Silicon can
+  produce the x86_64 artifact too); `macos-13` runners never got scheduled and
+  left the whole release queued for hours. Added job `timeout-minutes` so a
+  wedged runner fails fast instead of hanging.
+- Website: removed all donation/funding content; the Downloads page now detects
+  the visitor's OS and surfaces the matching install command; site version label
+  tracks the release.
+
 ## [0.7.1] - 2026-07-22
 
 A correctness release around dependency versioning.

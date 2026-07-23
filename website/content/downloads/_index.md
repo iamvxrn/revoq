@@ -1,29 +1,16 @@
 ---
 title: "Downloads"
+lead: "One line to install — we'll highlight the one for your system."
 ---
 
-## Install script
+The install script grabs the right prebuilt binary for your machine, drops it in
+`~/.local/bin` (`%LOCALAPPDATA%\deft\bin` on Windows), and runs `deft doctor` to
+check your toolchain.
 
-The quickest way in. This grabs the right prebuilt binary for your machine,
-drops it in `~/.local/bin`, and runs `deft doctor` to check your toolchain.
-
-**macOS, Linux, WSL, or Git Bash:**
-
-```sh
-curl -fsSL https://deft-cli.com/install.sh | sh
-```
-
-**Windows (PowerShell):**
-
-```powershell
-irm https://deft-cli.com/install.ps1 | iex
-```
-
-Piping a script into your shell is convenient but you're trusting it — read it
-first if you like ([install.sh](https://deft-cli.com/install.sh),
-[install.ps1](https://deft-cli.com/install.ps1)). Want a specific version? Set
-`DEFT_VERSION=v0.6.0` before running. Want it somewhere else? Set
-`DEFT_BIN_DIR`.
+Piping a script into your shell is convenient, but you're trusting it — read it
+first if you like ([install.sh](/install.sh), [install.ps1](/install.ps1)). Want
+a specific version? Set `DEFT_VERSION=v0.7.2` before running. Want it somewhere
+else? Set `DEFT_BIN_DIR`.
 
 ## Build from source
 

@@ -228,14 +228,29 @@ impl Layout {
 /// extensions. The language is derived from the extension via the single
 /// source of truth, `Language::from_extension`, so entry routing and per-unit
 /// routing can never disagree (notably `.C` == C++).
+///
+/// Matching is done against the directory's *actual* filenames with a
+/// case-sensitive comparison, not `src.join(name).is_file()`. On a
+/// case-insensitive filesystem (Windows, and macOS by default) `main.c` and
+/// `main.C` are the same file on disk, so a plain `is_file()` probe for
+/// `main.c` would match a real `main.C` and mis-route a C++ entry as C. Reading
+/// the real name back preserves its case (both OSes are case-*preserving*), so
+/// `.C` stays C++ everywhere.
 fn find_canonical_entry(src: &Path) -> Option<(PathBuf, Crate, Language)> {
     const ENTRY_EXTS: [&str; 7] = ["cpp", "c", "cc", "cxx", "C", "c++", "cp"];
+    let names: Vec<(String, PathBuf)> = fs::read_dir(src)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_file())
+        .filter_map(|e| e.file_name().to_str().map(|n| (n.to_string(), e.path())))
+        .collect();
+
     for (stem, kind) in [("main", Crate::Executable), ("lib", Crate::Library)] {
         for ext in ENTRY_EXTS {
-            let entry = src.join(format!("{stem}.{ext}"));
-            if entry.is_file() {
-                let lang = Language::from_extension(&entry).expect("ENTRY_EXTS are recognized");
-                return Some((entry, kind, lang));
+            let target = format!("{stem}.{ext}");
+            if let Some((_, path)) = names.iter().find(|(name, _)| name == &target) {
+                let lang = Language::from_extension(path).expect("ENTRY_EXTS are recognized");
+                return Some((path.clone(), kind, lang));
             }
         }
     }
