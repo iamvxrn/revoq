@@ -2,8 +2,6 @@
 title: "Manifest & Lockfile Specification"
 ---
 
-# Manifest & Lockfile Specification
-
 The absolute structural specification for `deft.toml` and `deft.lock`, drawn
 directly from the serde data model in [manifest.rs](../src/manifest.rs) and
 the layout rules in [engine.rs](../src/engine.rs).

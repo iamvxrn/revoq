@@ -2,8 +2,6 @@
 title: "CLI Reference"
 ---
 
-# CLI Reference
-
 Complete command and flag reference for the `deft` binary, derived from the
 `clap` definitions in [cli.rs](../src/cli.rs) and the dispatch logic in
 [main.rs](../src/main.rs).

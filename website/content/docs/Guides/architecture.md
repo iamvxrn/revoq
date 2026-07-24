@@ -2,8 +2,6 @@
 title: "Architecture"
 ---
 
-# Architecture
-
 This document describes how `deft` is put together internally: the design
 philosophy behind its decisions, and the concrete mechanics of its hot path,
 parallel compiler engine, language isolation, and archiver fallback chain.
