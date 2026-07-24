@@ -39,7 +39,7 @@ hugo server
 
 ## Release notes
 
-See [`cli/CHANGELOG.md`](cli/CHANGELOG.md). The current release is **0.6.0**
+See [`cli/CHANGELOG.md`](cli/CHANGELOG.md). The current release is **0.7.2**
 (the Legacy Support release).
 
 ## License
