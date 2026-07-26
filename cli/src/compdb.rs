@@ -35,7 +35,10 @@ impl CompileCommandEntry {
                 "directory".to_string(),
                 Json::str(self.directory.display().to_string()),
             ),
-            ("file".to_string(), Json::str(self.file.display().to_string())),
+            (
+                "file".to_string(),
+                Json::str(self.file.display().to_string()),
+            ),
             (
                 "arguments".to_string(),
                 Json::Array(
@@ -65,10 +68,8 @@ mod tests {
     use crate::json::Json;
 
     fn temp_dir(label: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "deft-compdb-test-{label}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("deft-compdb-test-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

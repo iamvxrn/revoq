@@ -124,7 +124,10 @@ pub fn aggregate_and_report(obj_dir: &Path, profile_dir: &Path, quiet: bool) {
         return;
     }
 
-    let doc = Json::Object(vec![("traceEvents".to_string(), Json::Array(merged_events))]);
+    let doc = Json::Object(vec![(
+        "traceEvents".to_string(),
+        Json::Array(merged_events),
+    )]);
     let out_path = profile_dir.join("deft_profile.json");
     if fs::write(&out_path, doc.render()).is_err() {
         return;
@@ -144,7 +147,7 @@ pub fn aggregate_and_report(obj_dir: &Path, profile_dir: &Path, quiet: bool) {
 
 fn print_summary(bottlenecks: &[Bottleneck], out_path: &Path) {
     let mut sorted: Vec<&Bottleneck> = bottlenecks.iter().collect();
-    sorted.sort_by(|a, b| b.dur_us.cmp(&a.dur_us));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.dur_us));
     let shown = sorted.len().min(10);
 
     println!(
@@ -171,18 +174,15 @@ mod tests {
     use super::*;
 
     fn temp_dir(label: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("deft-trace-test-{label}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("deft-trace-test-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
     fn write_trace_file(path: &Path, events_json: &str) {
-        std::fs::write(
-            path,
-            format!(r#"{{"traceEvents": [{events_json}]}}"#),
-        )
-        .unwrap();
+        std::fs::write(path, format!(r#"{{"traceEvents": [{events_json}]}}"#)).unwrap();
     }
 
     #[test]

@@ -348,9 +348,7 @@ impl<'a> Parser<'a> {
         let mut value = 0u32;
         for _ in 0..4 {
             let b = self.bump().ok_or("unterminated unicode escape")?;
-            let digit = (b as char)
-                .to_digit(16)
-                .ok_or("invalid unicode escape")?;
+            let digit = (b as char).to_digit(16).ok_or("invalid unicode escape")?;
             value = value * 16 + digit;
         }
         Ok(value)
@@ -472,7 +470,10 @@ mod tests {
         assert!(matches!(Json::parse("false").unwrap(), Json::Bool(false)));
         assert_eq!(Json::parse("-42").unwrap().as_i64(), Some(-42));
         assert_eq!(Json::parse("3.0").unwrap().as_i64(), Some(3));
-        assert_eq!(Json::parse("\"hi\\nthere\"").unwrap().as_str(), Some("hi\nthere"));
+        assert_eq!(
+            Json::parse("\"hi\\nthere\"").unwrap().as_str(),
+            Some("hi\nthere")
+        );
     }
 
     #[test]
@@ -492,7 +493,10 @@ mod tests {
         assert_eq!(event.get("name").and_then(Json::as_str), Some("Source"));
         assert_eq!(event.get("dur").and_then(Json::as_i64), Some(150));
         assert_eq!(
-            event.get("args").and_then(|a| a.get("detail")).and_then(Json::as_str),
+            event
+                .get("args")
+                .and_then(|a| a.get("detail"))
+                .and_then(Json::as_str),
             Some("foo.h")
         );
     }
@@ -508,7 +512,10 @@ mod tests {
     fn parse_then_render_is_stable_for_a_representative_document() {
         let original = Json::Object(vec![
             ("a".to_string(), Json::Number(1)),
-            ("b".to_string(), Json::Array(vec![Json::str("x"), Json::Null])),
+            (
+                "b".to_string(),
+                Json::Array(vec![Json::str("x"), Json::Null]),
+            ),
         ]);
         let rendered = original.render();
         let reparsed = Json::parse(&rendered).unwrap();
