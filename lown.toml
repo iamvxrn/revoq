@@ -1,7 +1,8 @@
 [package]
-name = "deft"
+name = "revol"
 version = "0.7.2"
-executable = "deft"
+executable = "revol"
 
 [scripts]
 install = "install.sh"
+uninstall = "uninstall.sh"

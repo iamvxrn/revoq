@@ -1,7 +1,7 @@
-baseURL: "https://deft-cli.com/"
+baseURL: "https://revol-cli.com/"
 locale: "en-us"
-title: "deft"
-theme: "deft"
+title: "revol"
+theme: "revol"
 
 markup:
   goldmark:

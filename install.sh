@@ -1,22 +1,15 @@
 #!/bin/sh
-# deft installer — macOS, Linux, WSL, and Git Bash.
+# revol installer — macOS, Linux, WSL, and Git Bash.
 #
-#   curl -fsSL https://deft-cli.com/install.sh | sh
+#   curl -fsSL https://revol-cli.com/install.sh | sh
 #
 # Downloads the latest release binary for your OS/arch, drops it in
-# ~/.local/bin (override with DEFT_BIN_DIR), and runs `deft doctor`.
-#
-# Knobs:
-#   DEFT_BIN_DIR=/usr/local/bin   install location
-#   DEFT_VERSION=v0.6.0           pin a version instead of the latest release
-#
-# Native Windows (PowerShell / cmd, no Git Bash)? Use install.ps1 instead:
-#   irm https://deft-cli.com/install.ps1 | iex
+# ~/.local/bin (override with REVOL_BIN_DIR), and runs `revol doctor`.
 
 set -eu
 
-REPO="xntas/deft"
-BIN_DIR="${LOWN_BIN:-${DEFT_BIN_DIR:-$HOME/.local/bin}}"
+REPO="iamvxrn/revol"
+BIN_DIR="${LOWN_BIN:-${REVOL_BIN_DIR:-$HOME/.local/bin}}"
 
 say()  { printf '  %s\n' "$1"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$1" >&2; }
@@ -37,12 +30,12 @@ fi
 os="$(uname -s)"
 arch="$(uname -m)"
 ext="tar.gz"
-binname="deft"
+binname="revol"
 
 case "$os" in
   Linux)                         plat="unknown-linux-gnu" ;;
   Darwin)                        plat="apple-darwin" ;;
-  MINGW*|MSYS*|CYGWIN*|Windows*) plat="pc-windows-msvc"; ext="zip"; binname="deft.exe" ;;
+  MINGW*|MSYS*|CYGWIN*|Windows*) plat="pc-windows-msvc"; ext="zip"; binname="revol.exe" ;;
   *) die "unsupported OS '$os' — build from source: https://github.com/$REPO" ;;
 esac
 
@@ -52,7 +45,6 @@ case "$arch" in
   *) die "unsupported architecture '$arch' — build from source: https://github.com/$REPO" ;;
 esac
 
-# Windows builds are x86_64-only for now.
 if [ "$plat" = "pc-windows-msvc" ] && [ "$cpu" != "x86_64" ]; then
   die "no Windows build for '$arch' yet — build from source: https://github.com/$REPO"
 fi
@@ -60,22 +52,22 @@ fi
 target="${cpu}-${plat}"
 
 # --- resolve version -------------------------------------------------------
-if [ "${DEFT_VERSION:-}" != "" ]; then
-  tag="$DEFT_VERSION"
+if [ "${REVOL_VERSION:-}" != "" ]; then
+  tag="$REVOL_VERSION"
 else
   say "resolving latest release..."
   tag="$(fetch "https://api.github.com/repos/$REPO/releases/latest" \
     | grep '"tag_name"' | head -1 | cut -d'"' -f4)"
-  [ -n "$tag" ] || die "couldn't determine the latest release (set DEFT_VERSION=vX.Y.Z to pin one)"
+  [ -n "$tag" ] || die "couldn't determine the latest release (set REVOL_VERSION=vX.Y.Z to pin one)"
 fi
 
-asset="deft-${target}.${ext}"
+asset="revol-${target}.${ext}"
 url="https://github.com/$REPO/releases/download/${tag}/${asset}"
 
-say "installing deft ${tag} (${target})"
+say "installing revol ${tag} (${target})"
 
 # --- download + extract ----------------------------------------------------
-tmp="$(mktemp -d 2>/dev/null || mktemp -d -t deft)"
+tmp="$(mktemp -d 2>/dev/null || mktemp -d -t revol)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 say "downloading ${asset}"
@@ -87,13 +79,12 @@ case "$ext" in
     if command -v unzip >/dev/null 2>&1; then
       unzip -q "$tmp/$asset" -d "$tmp"
     else
-      # bsdtar (ships with modern Windows / Git Bash) can read zips.
       tar xf "$tmp/$asset" -C "$tmp" 2>/dev/null || die "need 'unzip' to extract $asset"
     fi
     ;;
 esac
 
-src="$tmp/deft-${target}/$binname"
+src="$tmp/revol-${target}/$binname"
 [ -f "$src" ] || die "archive did not contain the expected binary ($binname)"
 
 # --- install ---------------------------------------------------------------
@@ -112,6 +103,6 @@ esac
 
 # --- verify the toolchain --------------------------------------------------
 printf '\n'
-say "running 'deft doctor' to check your environment..."
+say "running 'revol doctor' to check your environment..."
 printf '\n'
-"$BIN_DIR/$binname" doctor || warn "deft is installed, but doctor flagged issues above — fix those before building."
+"$BIN_DIR/$binname" doctor || warn "revol is installed, but doctor flagged issues above — fix those before building."
