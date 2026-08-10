@@ -1,110 +1,96 @@
 {{ define "main" }}
 
-<!-- Hero -->
 <section class="hero">
-    <p class="hero__eyebrow">
-        {{ .Site.Title }} {{ .Site.Params.version | default "v0.7.2" }} — build system for C/C++
-    </p>
-    <h1 class="hero__title">{{ .Site.Title }}</h1>
-    <p class="hero__sub">{{ .Site.Params.description }}</p>
+  <span class="hero__eyebrow">deft {{ .Site.Params.version | default "v0.7.2" }} — build system for C/C++</span>
+  <h1 class="hero__title">
+    Cargo-style build system <br>
+    <span class="hero__title-highlight">for C and C++ projects</span>
+  </h1>
+  <p class="hero__sub">
+    Deft compiles C and C++ projects with deterministic dependency locking, strict entry point conventions, and parallel work queues.
+  </p>
 
-    <div class="terminal-box">
-        <div class="terminal-header">
-            <div class="terminal-dots">
-                <span class="terminal-dot"></span>
-                <span class="terminal-dot"></span>
-                <span class="terminal-dot"></span>
-            </div>
-            <div class="terminal-tabs">
-                <button class="terminal-tab is-active" id="tab-lown" onclick="switchInstallTab('lown')">Lown</button>
-                <button class="terminal-tab" id="tab-curl" onclick="switchInstallTab('curl')">Curl</button>
-                <button class="terminal-tab" id="tab-ps" onclick="switchInstallTab('ps')">PowerShell</button>
-            </div>
-        </div>
-        <div class="terminal-body">
-            <div class="terminal-cmd">
-                <span class="terminal-prompt">$</span><span id="hero-install-cmd">lown install gh:iamvxrn/deft</span>
-            </div>
-            <button
-                class="copy-btn"
-                id="hero-install-copy"
-                data-copy="lown install gh:iamvxrn/deft"
-                onclick="copyInstallCmd()"
-            >
-                copy
-            </button>
-        </div>
+  <div class="terminal-box">
+    <div class="terminal-header">
+      <div class="terminal-dots">
+        <span class="terminal-dot"></span>
+        <span class="terminal-dot"></span>
+        <span class="terminal-dot"></span>
+      </div>
+      <div class="terminal-tabs">
+        <button class="terminal-tab is-active" id="tab-lown" onclick="switchInstallTab('lown')">Lown</button>
+        <button class="terminal-tab" id="tab-curl" onclick="switchInstallTab('curl')">Curl</button>
+        <button class="terminal-tab" id="tab-ps" onclick="switchInstallTab('ps')">PowerShell</button>
+      </div>
     </div>
-
-    <div>
-        <a href="/docs/" class="hero-footer-link">Documentation →</a>
+    <div class="terminal-body">
+      <div class="terminal-cmd">
+        <span class="terminal-prompt">$</span><span id="hero-install-cmd">lown install gh:iamvxrn/deft</span>
+      </div>
+      <button
+        class="copy-btn"
+        id="hero-install-copy"
+        data-copy="lown install gh:iamvxrn/deft"
+        onclick="copyInstallCmd()"
+      >
+        copy
+      </button>
     </div>
+  </div>
 
-    <script>
-        var installCmds = {
-            lown: "lown install gh:iamvxrn/deft",
-            curl: "curl -fsSL https://deft-cli.com/install.sh | sh",
-            ps: "irm https://deft-cli.com/install.ps1 | iex"
-        };
-        function switchInstallTab(tabKey) {
-            document.querySelectorAll('.terminal-tab').forEach(function(b) { b.classList.remove('is-active'); });
-            var tabBtn = document.getElementById('tab-' + tabKey);
-            if (tabBtn) tabBtn.classList.add('is-active');
-            var cmd = installCmds[tabKey] || installCmds.lown;
-            var span = document.getElementById('hero-install-cmd');
-            var btn = document.getElementById('hero-install-copy');
-            if (span) span.textContent = cmd;
-            if (btn) btn.setAttribute('data-copy', cmd);
-        }
-        function copyInstallCmd() {
-            var btn = document.getElementById('hero-install-copy');
-            var cmd = btn.getAttribute('data-copy');
-            navigator.clipboard.writeText(cmd).then(function() {
-                var oldText = btn.textContent;
-                btn.textContent = 'copied!';
-                setTimeout(function() { btn.textContent = oldText; }, 1500);
-            });
-        }
-    </script>
+  <div>
+    <a href="/docs/" class="hero-footer-link">Documentation & Spec →</a>
+  </div>
+
+  <script>
+    var installCmds = {
+      lown: "lown install gh:iamvxrn/deft",
+      curl: "curl -fsSL https://deft-cli.com/install.sh | sh",
+      ps: "irm https://deft-cli.com/install.ps1 | iex"
+    };
+
+    function switchInstallTab(tabKey) {
+      document.querySelectorAll('.terminal-tab').forEach(function(b) { b.classList.remove('is-active'); });
+      var tabBtn = document.getElementById('tab-' + tabKey);
+      if (tabBtn) tabBtn.classList.add('is-active');
+      var cmd = installCmds[tabKey] || installCmds.lown;
+      var span = document.getElementById('hero-install-cmd');
+      var btn = document.getElementById('hero-install-copy');
+      if (span) span.textContent = cmd;
+      if (btn) btn.setAttribute('data-copy', cmd);
+    }
+
+    function copyInstallCmd() {
+      var btn = document.getElementById('hero-install-copy');
+      var cmd = btn.getAttribute('data-copy');
+      navigator.clipboard.writeText(cmd).then(function() {
+        var oldText = btn.textContent;
+        btn.textContent = 'copied!';
+        setTimeout(function() { btn.textContent = oldText; }, 1500);
+      });
+    }
+  </script>
 </section>
 
-<!-- Features -->
 <section class="features" id="features">
-  <p class="section-label">Architecture</p>
+  <p class="section-label">System Architecture</p>
   <h2 class="section-heading">Build System Specifications</h2>
 
   <div class="features__grid">
     <div class="feature-card">
       <div class="feature-card__number">01</div>
-      <div class="feature-card__icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4a7bc0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect width="18" height="18" x="3" y="3" rx="2"/>
-          <path d="M3 9h18M9 21V9"/>
-        </svg>
-      </div>
       <div class="feature-card__title">Strict Project Layout</div>
       <div class="feature-card__body">Entry points are deterministic: <code>src/main.cpp</code> / <code>src/main.c</code> for binaries or <code>src/lib.cpp</code> / <code>src/lib.c</code> for libraries. Unresolved entries halt compilation.</div>
     </div>
 
     <div class="feature-card">
       <div class="feature-card__number">02</div>
-      <div class="feature-card__icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4a7bc0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-        </svg>
-      </div>
       <div class="feature-card__title">Reproducible Dependency Graph</div>
       <div class="feature-card__body"><code>deft.lock</code> pins dependencies to exact Git commit SHAs via atomic file swaps. <code>deft build</code> strictly honors locked states.</div>
     </div>
 
     <div class="feature-card">
       <div class="feature-card__number">03</div>
-      <div class="feature-card__icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4a7bc0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-      </div>
       <div class="feature-card__title">Parallel Work Queue</div>
       <div class="feature-card__body">A multi-threaded worker queue compiles translation units in parallel across available CPU cores, streaming diagnostic outputs as units finish.</div>
     </div>
