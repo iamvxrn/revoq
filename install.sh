@@ -16,7 +16,7 @@
 set -eu
 
 REPO="xntas/deft"
-BIN_DIR="${DEFT_BIN_DIR:-$HOME/.local/bin}"
+BIN_DIR="${LOWN_BIN:-${DEFT_BIN_DIR:-$HOME/.local/bin}}"
 
 say()  { printf '  %s\n' "$1"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$1" >&2; }

@@ -1,0 +1,7 @@
+[package]
+name = "deft"
+version = "0.7.2"
+executable = "deft"
+
+[scripts]
+install = "install.sh"
