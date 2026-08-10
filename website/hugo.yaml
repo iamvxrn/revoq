@@ -1,5 +1,5 @@
 baseURL: "https://deft-cli.com/"
-languageCode: "en-us"
+locale: "en-us"
 title: "deft"
 theme: "deft"
 
@@ -16,17 +16,8 @@ menu:
     - name: "Docs"
       url: "/docs/"
       weight: 1
-    - name: "Downloads"
-      url: "/downloads/"
-      weight: 2
-    - name: "Packages"
-      url: "/packages/"
-      weight: 3
-    - name: "Community"
-      url: "/community/"
-      weight: 4
 
 params:
   version: "v0.7.2"
-  description: "An experiment: Cargo-style tooling for C/C++, built to see how far AI can take it."
-  tagline: "Cargo, but for C/C++. An AI experiment."
+  description: "Cargo-style build system for C and C++ projects featuring deterministic lockfiles and parallel compilation."
+  tagline: "Cargo-style build toolchain for C/C++"
