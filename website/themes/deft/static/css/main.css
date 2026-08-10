@@ -411,7 +411,7 @@ img { max-width: 100%; display: block; }
 
 /* ── Feature grid ────────────────────────────────────────────────── */
 .features {
-  padding: clamp(4rem, 8vw, 7rem) clamp(1.5rem, 5vw, 3rem);
+  padding: 3.5rem 1.5rem;
   max-width: var(--max-w);
   margin: 0 auto;
 }
@@ -741,31 +741,19 @@ code {
 /* ── Footer ──────────────────────────────────────────────────────── */
 .footer {
   border-top: 1px solid var(--border);
-  padding: 2.5rem clamp(1.5rem, 5vw, 3rem);
+  padding: 2.5rem 1.5rem;
   margin-top: auto;
-  view-transition-name: site-footer;
+  background: var(--surface);
 }
 
-.footer__inner {
+.footer__container {
   max-width: var(--max-w);
   margin: 0 auto;
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 2rem;
-}
-
-.footer__brand {
-  display: flex;
   align-items: center;
-  gap: 1rem;
-}
-
-.footer__copy {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--subtle);
-  padding-top: 0.2rem;
 }
 
 .footer__icon-btn {
