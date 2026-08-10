@@ -5,8 +5,8 @@ title: "Documentation"
 ## Getting started
 
 This walks you from an empty directory to a running C/C++ project in about a
-minute. You'll need `clang` installed and the `deft` binary on your `PATH`. Not
-sure your setup is good? Run `deft doctor` any time — it checks the whole
+minute. You'll need `clang` installed and the `revol` binary on your `PATH`. Not
+sure your setup is good? Run `revol doctor` any time — it checks the whole
 toolchain for you.
 
 ### 1. Start a project
@@ -18,15 +18,15 @@ mkdir my_project
 cd my_project
 
 # Defaults to a C++ executable
-deft init
+revol init
 ```
 
-Want a C project or a static library instead? Use `deft init --c` or
-`deft init --lib`.
+Want a C project or a static library instead? Use `revol init --c` or
+`revol init --lib`.
 
 ### 2. The layout
 
-deft borrows Cargo's idea of a fixed, predictable layout, so there's nothing to
+revol borrows Cargo's idea of a fixed, predictable layout, so there's nothing to
 configure about where files go. A fresh project looks like this:
 
 ```text
@@ -34,10 +34,10 @@ my_project/
 ├── src/
 │   └── main.cpp  # the entry point for a C++ executable
 ├── .gitignore    # generated, ignores target/
-└── deft.toml     # the manifest
+└── revol.toml     # the manifest
 ```
 
-And `deft.toml` starts small:
+And `revol.toml` starts small:
 
 ```toml
 [package]
@@ -50,7 +50,7 @@ warnings = ["all", "extra"]
 optimization = "0"
 ```
 
-> **One language per package.** deft won't let a package mix C and C++. Drop a
+> **One language per package.** revol won't let a package mix C and C++. Drop a
 > `.c` file into a C++ package and the build stops with a `LayoutViolation`
 > rather than quietly compiling it with the wrong flags. (Building a legacy tree
 > that doesn't fit? See the manifest guide's Legacy Support section.)
@@ -60,12 +60,12 @@ optimization = "0"
 From the project root:
 
 ```bash
-deft build
+revol build
 ```
 
-deft finds every source under `src/`, spreads the work across an internal thread
+revol finds every source under `src/`, spreads the work across an internal thread
 pool, and calls the compiler. One nice consequence of how it's built: a
-successful build never pays for environment checks — deft only runs its `doctor`
+successful build never pays for environment checks — revol only runs its `doctor`
 diagnostics when a build actually *fails*, so the happy path stays lean.
 
 Everything it produces lands in `target/`:
@@ -76,7 +76,7 @@ Everything it produces lands in `target/`:
 For an optimized build — `-O3`, no debug symbols, `-DNDEBUG` — add `--release`:
 
 ```bash
-deft build --release
+revol build --release
 ```
 
 ### 4. Run
@@ -84,21 +84,21 @@ deft build --release
 Build and run in one step:
 
 ```bash
-deft run
+revol run
 ```
 
-Need to pass arguments to *your* program rather than to deft? Put them after
+Need to pass arguments to *your* program rather than to revol? Put them after
 `--`:
 
 ```bash
-deft run -- --port 8080 --verbose
+revol run -- --port 8080 --verbose
 ```
 
 Everything after `--` is forwarded to your executable untouched.
 
 ### 5. Add a dependency
 
-deft pulls dependencies without git submodules or vendored headers. Add a GitHub
+revol pulls dependencies without git submodules or vendored headers. Add a GitHub
 shorthand to the `[dependencies]` table:
 
 ```toml
@@ -109,11 +109,11 @@ shorthand to the `[dependencies]` table:
 Then fetch and lock it:
 
 ```bash
-deft update
+revol update
 ```
 
-Under the hood, deft clones the repo into its global cache (`~/.deft/cache/`),
-resolves the tag you asked for, and pins the exact commit in `deft.lock` so the
-build is the same on every machine. From the next `deft build` on, the dependency
+Under the hood, revol clones the repo into its global cache (`~/.revol/cache/`),
+resolves the tag you asked for, and pins the exact commit in `revol.lock` so the
+build is the same on every machine. From the next `revol build` on, the dependency
 is compiled to a static library (`.a` / `.lib`) and linked into your binary
 automatically.

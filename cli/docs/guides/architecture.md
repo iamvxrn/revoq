@@ -1,21 +1,21 @@
 # Architecture
 
-This document describes how `deft` is put together internally: the design
+This document describes how `revol` is put together internally: the design
 philosophy behind its decisions, and the concrete mechanics of its hot path,
 parallel compiler engine, language isolation, and archiver fallback chain.
 It reflects the actual implementation in `src/`, not an aspirational design.
 
 ## Philosophy
 
-`deft` is a build system and package manager for C and C++. Three commitments
+`revol` is a build system and package manager for C and C++. Three commitments
 shape every module:
 
 **A manifest-driven mindset for C/C++.** The user-facing shape — `init`,
-`build`, `run`, a `deft.toml` manifest, a `deft.lock` lockfile, `[features]`,
+`build`, `run`, a `revol.toml` manifest, a `revol.lock` lockfile, `[features]`,
 `[profile.*]` — gives C/C++ projects the declarative, manifest-and-lockfile
 workflow that's normal in modern package ecosystems but rare in this space.
-`deft.toml` declares package metadata, features, and compiler profiles;
-`deft.lock` pins every dependency to an exact commit. Each package is a
+`revol.toml` declares package metadata, features, and compiler profiles;
+`revol.lock` pins every dependency to an exact commit. Each package is a
 single, strictly-typed unit that is either an executable or a library — there
 is no broader "workspace member" concept beyond the `[workspace]` table
 itself.
@@ -24,7 +24,7 @@ itself.
 declares exactly three runtime dependencies: `clap` (CLI parsing), `serde`
 (data model derive), and `toml` (manifest/lockfile format). There is no HTTP
 client crate, no VCS crate, no CMake-parsing crate, and no async runtime.
-Every place deft would normally reach for a library, it instead shells out to
+Every place revol would normally reach for a library, it instead shells out to
 a tool the host OS or toolchain already provides:
 
 - Dependency fetching: `git` (the resolver wraps `Command::new("git")`,
@@ -43,13 +43,13 @@ a tool the host OS or toolchain already provides:
   `-ftime-trace` output: a closed, hand-written `Json` enum with its own
   `render()`/`render_pretty()`/`parse()`, never `serde_json`
   ([json.rs](../src/json.rs)). `parse()` is deliberately read-only and
-  scoped to the JSON documents deft actually needs to read back (Chrome
+  scoped to the JSON documents revol actually needs to read back (Chrome
   Trace Event Format) — it is not a general-purpose JSON library.
 
-This keeps the deft binary itself small and fast to build, and keeps deft's
+This keeps the revol binary itself small and fast to build, and keeps revol's
 own supply chain trivially auditable.
 
-**Strict layout enforcement.** deft does not glob for source files and does
+**Strict layout enforcement.** revol does not glob for source files and does
 not let a manifest declare a custom file list. `Layout::discover` in
 [engine.rs](../src/engine.rs) recognizes exactly four canonical entry files,
 in priority order:
@@ -59,13 +59,13 @@ in priority order:
 3. `src/lib.cpp` → library, C++
 4. `src/lib.c` → library, C
 
-If none exists, the build fails immediately with `DeftError::LayoutViolation`
+If none exists, the build fails immediately with `RevolError::LayoutViolation`
 before any compiler is invoked. This removes an entire class of "where did it
 find that file" debugging that ad hoc build systems suffer from.
 
 ## Hot-Path Strategy
 
-`deft build`'s defining performance goal is a near-instant invocation when the
+`revol build`'s defining performance goal is a near-instant invocation when the
 environment is already healthy — the README's stated target is essentially
 zero perceptible overhead beyond the actual compiler/linker work. This is
 achieved by **trusting the environment** rather than verifying it.
@@ -74,17 +74,17 @@ Concretely, `cmd_build` in [main.rs](../src/main.rs) never probes for `clang`,
 never checks `ar`, and never validates that `git`/`curl` exist before doing
 real work. The only things it does before invoking the compiler are:
 
-1. Locate `deft.toml` (`project_root`) — one `is_file` check.
+1. Locate `revol.toml` (`project_root`) — one `is_file` check.
 2. Parse the manifest (`Manifest::load`) — one `read_to_string` + TOML parse.
-3. Discover the layout (`Layout::assert_deft_standard`) — directory/file
+3. Discover the layout (`Layout::assert_revol_standard`) — directory/file
    existence checks already required to find the entry point.
 4. Resolve dependencies from the lockfile (no network I/O if the cache is
    already populated and the lock is honored).
 
 All toolchain *health* checking — "is clang on PATH", "can clang actually
 compile against this sysroot's headers", "is `ar` present", "is `$HOME` set"
-— lives exclusively in `deft doctor` ([doctor.rs](../src/doctor.rs)), which a
-healthy `deft build` never runs.
+— lives exclusively in `revol doctor` ([doctor.rs](../src/doctor.rs)), which a
+healthy `revol build` never runs.
 
 The connection between the two is `build_with_diagnostics` in
 [main.rs](../src/main.rs):
@@ -94,7 +94,7 @@ fn build_with_diagnostics(args: BuildArgs, verbose: bool, quiet: bool) -> Result
     match cmd_build(args, verbose, quiet) {
         Ok(outcome) => Ok(outcome),
         Err(err) => {
-            // only on failure: print a note, then run `deft doctor::run`
+            // only on failure: print a note, then run `revol doctor::run`
             ...
         }
     }
@@ -102,7 +102,7 @@ fn build_with_diagnostics(args: BuildArgs, verbose: bool, quiet: bool) -> Result
 ```
 
 A successful build pays zero cost for diagnostics. Only once a build has
-*already failed* does deft pay for the comparatively expensive, exhaustive
+*already failed* does revol pay for the comparatively expensive, exhaustive
 `doctor` sweep (spawning `clang --version`, `ar --version`, `git --version`,
 a real probe compile, etc.) — at that point the user is blocked anyway and
 wants an explanation, so the cost is justified. This is the central
@@ -176,7 +176,7 @@ beyond the `completed`/`total` figures used purely for display.
 
 After draining results, every worker `JoinHandle` is `.join()`'d (ignoring
 panics rather than propagating them — `let _ = handle.join();`), and the
-function returns `DeftError::Compilation { failures }` if any unit failed,
+function returns `RevolError::Compilation { failures }` if any unit failed,
 or the full list of object file paths otherwise.
 
 ## Compiler Boundary Isolation
@@ -225,7 +225,7 @@ This isolation is also enforced at the *package* level by
 exactly one `entry_language` (decided by which of the four canonical entry
 files exists), and any source file under `src/` whose language disagrees
 with the entry language is collected into a `foreign` list and turned into a
-hard `DeftError::LayoutViolation` rather than silently compiled. A deft
+hard `RevolError::LayoutViolation` rather than silently compiled. A revol
 package is single-language, full stop — see [manifest.md](manifest.md) for
 the directory-layout rules this produces.
 
@@ -238,7 +238,7 @@ never otherwise.
 
 ## Cross-Platform Archiver Fallback Chain
 
-Producing a static library is the one step in deft where "the same tool
+Producing a static library is the one step in revol where "the same tool
 exists on every platform" is false: Unix systems have a single archiver
 (`ar`) with one calling convention, but Windows toolchains may expose either
 `llvm-ar` (Unix-style: `rcsD <archive> <objects...>`) or MSVC's `lib.exe`
@@ -263,7 +263,7 @@ exactly one entry for executables, which only ever link with
   `ar rcsD <archive> <objects...>`.
 - **Windows**: two candidates, most-preferred first —
   1. `llvm-ar rcsD <archive> <objects...>` (LLVM's `ar`-compatible archiver,
-     present if the user has LLVM installed — likely, since deft already
+     present if the user has LLVM installed — likely, since revol already
      requires `clang`/`clang++` from the same distribution).
   2. `lib.exe /OUT:<archive> <objects...>` (MSVC's native librarian, present
      if Visual Studio Build Tools are installed instead).
@@ -286,15 +286,15 @@ let output = match Command::new(&link.program).args(&link.args).output() {
             // log "not found; trying next archiver", remember the error, continue
             continue;
         }
-        return Err(DeftError::CommandSpawn { ... }); // last candidate also missing
+        return Err(RevolError::CommandSpawn { ... }); // last candidate also missing
     }
 };
 ```
 
 Critically, once a candidate program *does* spawn, its exit code becomes
 authoritative — a real archiving failure (bad objects, disk full, etc.) is
-reported immediately as `DeftError::CommandFailed` with clang-diagnostic-style
-formatting where applicable, and deft does **not** silently fall through to
+reported immediately as `RevolError::CommandFailed` with clang-diagnostic-style
+formatting where applicable, and revol does **not** silently fall through to
 the next candidate just because the first one that ran happened to fail. The
 fallback chain exists purely to route around "tool not installed," never to
 paper over a real build error.
@@ -307,8 +307,8 @@ archiver convention.
 
 ## IDE and Profiling Artifacts
 
-Two v0.5.0 additions — `compile_commands.json` and `deft build --trace` —
-follow the same "derive it from what deft already computed, don't add a new
+Two v0.5.0 additions — `compile_commands.json` and `revol build --trace` —
+follow the same "derive it from what revol already computed, don't add a new
 source of truth" principle as everything else in this document.
 
 **`compile_commands.json` entries are a side effect of argument-vector
@@ -318,10 +318,10 @@ get the `CompileUnit` it hands to the compile thread-pool
 ([Parallel Compilation Engine](#parallel-compilation-engine)). Since v0.5.0,
 that same call happens *before* the global-cache short-circuit, and its
 result is reused to build a `compdb::CompileCommandEntry` (`compdb.rs`) —
-`directory` (the deft process's own cwd), `file` (the unit's source path),
+`directory` (the revol process's own cwd), `file` (the unit's source path),
 `arguments` (`clang`/`clang++` prepended to the unit's argument vector
 verbatim). No flags are recomputed or guessed a second time; the compilation
-database is exactly what deft would run, because it's built from the same
+database is exactly what revol would run, because it's built from the same
 `Vec<String>` that either does or doesn't get handed to `Command::new`.
 
 **Every package built in one invocation contributes.** `main.rs` threads
@@ -340,7 +340,7 @@ and sanitizer flags into both `c_flags()` and `cpp_flags()` — also injects
 `-ftime-trace` when `Compiler`'s `trace` field is set. Because
 `cache_fingerprint()` (used by the global build cache, see [Parallel
 Compilation Engine](#parallel-compilation-engine) and
-[cli.md](cli.md#deft-build)) calls those same two functions, a `--trace`
+[cli.md](cli.md#revol-build)) calls those same two functions, a `--trace`
 build's cache key is automatically distinct from a non-`--trace` build's.
 This isn't a special case bolted on for tracing — it falls out of the
 existing "the fingerprint is whatever flags actually reach clang" design,
@@ -367,7 +367,7 @@ beyond that.
 
 ## Cross-Compilation and Static Analysis
 
-`--target` and `deft check` (v0.5.0) both extend existing machinery rather
+`--target` and `revol check` (v0.5.0) both extend existing machinery rather
 than introducing parallel code paths — the same instinct behind [IDE and
 Profiling Artifacts](#ide-and-profiling-artifacts) above.
 
@@ -384,7 +384,7 @@ paths; `link_command` reads the same field directly. This is also why
 calls the exact same `c_flags`/`cpp_flags` that already carry the flag, so
 there's no separate cache-key logic to keep in sync.
 
-**`deft check` reuses the build engine's spawn-and-parse path instead of
+**`revol check` reuses the build engine's spawn-and-parse path instead of
 duplicating it.** `run_compile` in [engine.rs](../src/engine.rs) — the
 function that spawns `clang`/`clang++`, captures stderr, and runs it through
 `parse_clang_diagnostics` — only ever reads a `CompileUnit`'s `language`,
@@ -396,7 +396,7 @@ then hands it to the exact same `run_compile`/diagnostics-parsing pipeline
 `file:line:col: severity: message` format as ordinary warnings, so
 `parse_clang_diagnostics` needed no changes at all to support it — the
 existing colorized `Diagnostic::render()` terminal output "just works" for
-analyzer findings without deft treating them as a distinct kind of
+analyzer findings without revol treating them as a distinct kind of
 diagnostic.
 
 **Analysis intentionally sees a smaller flag surface than a real compile.**
@@ -404,5 +404,5 @@ diagnostic.
 by real compiles and analysis) are deliberately two different functions, not
 one function with a mode flag: optimization level, LTO, sanitizers, `-g`,
 `-DNDEBUG`, and `-ftime-trace` all only affect codegen, which `--analyze`
-never reaches, so `deft check` never constructs them in the first place
+never reaches, so `revol check` never constructs them in the first place
 rather than constructing and then filtering them out.

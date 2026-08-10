@@ -1,9 +1,9 @@
 //! Global build cache: deterministic package hashing plus on-disk storage of
-//! prebuilt static archives under `~/.deft/cache/prebuilt/{hash}/`.
+//! prebuilt static archives under `~/.revol/cache/prebuilt/{hash}/`.
 //!
 //! Hashing uses `std::hash::Hasher` (`DefaultHasher`, a SipHash variant) over
 //! source content/mtimes, the resolved compiler flag fingerprint, and the
-//! target OS/arch — no extra crate, matching deft's zero-dependency
+//! target OS/arch — no extra crate, matching revol's zero-dependency
 //! footprint (see docs/guides/architecture.md).
 
 use std::collections::hash_map::DefaultHasher;
@@ -42,9 +42,9 @@ pub fn package_key(sources: &[PathBuf], flags: &[String]) -> Result<String> {
     Ok(format!("{:016x}", hasher.finish()))
 }
 
-/// `~/.deft/cache/prebuilt/{key}` — the directory a given cache key maps to.
-fn prebuilt_dir(deft_home: &Path, key: &str) -> PathBuf {
-    deft_home.join("cache").join("prebuilt").join(key)
+/// `~/.revol/cache/prebuilt/{key}` — the directory a given cache key maps to.
+fn prebuilt_dir(revol_home: &Path, key: &str) -> PathBuf {
+    revol_home.join("cache").join("prebuilt").join(key)
 }
 
 /// Platform-appropriate static archive filename for a library named `name`.
@@ -58,14 +58,14 @@ fn archive_filename(name: &str) -> String {
 
 /// Look up a cached static archive for `key`/`name`. Returns its path only
 /// when the file actually exists on disk.
-pub fn lookup(deft_home: &Path, key: &str, name: &str) -> Option<PathBuf> {
-    let path = prebuilt_dir(deft_home, key).join(archive_filename(name));
+pub fn lookup(revol_home: &Path, key: &str, name: &str) -> Option<PathBuf> {
+    let path = prebuilt_dir(revol_home, key).join(archive_filename(name));
     path.is_file().then_some(path)
 }
 
 /// Store a freshly-built static archive in the global cache, keyed by `key`.
-pub fn store(deft_home: &Path, key: &str, name: &str, archive: &Path) -> Result<()> {
-    let dir = prebuilt_dir(deft_home, key);
+pub fn store(revol_home: &Path, key: &str, name: &str, archive: &Path) -> Result<()> {
+    let dir = prebuilt_dir(revol_home, key);
     fs::create_dir_all(&dir).path_ctx(&dir)?;
     let dest = dir.join(archive_filename(name));
     fs::copy(archive, &dest).path_ctx(&dest)?;
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn same_inputs_produce_the_same_key() {
-        let dir = std::env::temp_dir().join(format!("deft-hash-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("revol-hash-test-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let src = write_temp(&dir, "a.c", "int main(void) { return 0; }\n");
 
@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn changing_source_content_changes_the_key() {
-        let dir = std::env::temp_dir().join(format!("deft-hash-test2-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("revol-hash-test2-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let src = write_temp(&dir, "a.c", "int main(void) { return 0; }\n");
         let flags = vec!["-std=c17".to_string()];
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn changing_flags_changes_the_key() {
-        let dir = std::env::temp_dir().join(format!("deft-hash-test3-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("revol-hash-test3-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let src = write_temp(&dir, "a.c", "int main(void) { return 0; }\n");
 
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn lookup_misses_when_archive_absent_then_hits_after_store() {
-        let home = std::env::temp_dir().join(format!("deft-hash-home-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("revol-hash-home-{}", std::process::id()));
         let _ = fs::remove_dir_all(&home);
         fs::create_dir_all(&home).unwrap();
 

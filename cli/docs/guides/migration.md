@@ -1,24 +1,24 @@
-# Migration Guide: `deft migrate --from=cmake`
+# Migration Guide: `revol migrate --from=cmake`
 
-This document covers deft's CMake-to-`deft.toml` migration tool, implemented
+This document covers revol's CMake-to-`revol.toml` migration tool, implemented
 entirely in [migrate.rs](../src/migrate.rs). It is intentionally a "best
 effort, never crash, always tell you what's left" tool rather than a full
 CMake interpreter — the design rationale and every limitation below is
 directly reflected in the source.
 
 ```
-deft migrate [--from=cmake] [--path DIR]
+revol migrate [--from=cmake] [--path DIR]
 ```
 
 Currently `--from` accepts only the literal value `"cmake"` (the default);
-any other value returns `DeftError::Config` immediately. `--path` defaults to
+any other value returns `RevolError::Config` immediately. `--path` defaults to
 `.` and must contain a `CMakeLists.txt`.
 
-## `deft migrate --from=cmake`
+## `revol migrate --from=cmake`
 
 ### Zero-dependency token scanner mechanics
 
-In keeping with deft's "no heavy deps" rule (see
+In keeping with revol's "no heavy deps" rule (see
 [architecture.md](architecture.md#philosophy)), `migrate.rs` pulls in **no
 CMake-parsing crate** — not even a generic grammar/parser-combinator library.
 The entire extraction pipeline is plain `&str` scanning:
@@ -97,7 +97,7 @@ the file are collected, not just the first.
 ## Dominant Language Resolution
 
 CMake places no single-language restriction on a target — a single
-`add_executable` can legally mix `.c` and `.cpp` source files. deft's layout
+`add_executable` can legally mix `.c` and `.cpp` source files. revol's layout
 model forbids this entirely (see
 [manifest.md](manifest.md#directory-layout-standards)). Rather than making
 migration an all-or-nothing failure for any project that mixes languages,
@@ -109,14 +109,14 @@ let c_count = project.sources.len() - cpp_count;
 project.is_c = c_count > cpp_count;
 ```
 
-`is_cpp_source` recognizes the same extension set as deft's own
+`is_cpp_source` recognizes the same extension set as revol's own
 `Language::from_extension` ([compiler.rs](../src/compiler.rs)): `cc`, `cpp`,
 `cxx`, `c++`, `cp`. Every other recognized source extension (in practice,
 `.c`) counts toward `c_count`.
 
 **Tie-breaking.** The comparison is strict (`c_count > cpp_count`), so a tie
 (equal counts, including the zero-sources case) resolves to `is_c = false`,
-i.e. **C++ wins ties** — the source comment notes this matches `deft init`'s
+i.e. **C++ wins ties** — the source comment notes this matches `revol init`'s
 own default behavior (no flags → C++ executable), keeping the two tools
 consistent.
 
@@ -134,8 +134,8 @@ project.conflicting_sources = conflicting;
 
 `project.sources` (dominant-language files) are listed in the generated
 manifest's migration notes as files to manually move into the appropriate
-strict-layout entry file (`src/main.cpp`, etc. — deft has no "sources list"
-in `deft.toml`, so even the dominant-language files require a manual move,
+strict-layout entry file (`src/main.cpp`, etc. — revol has no "sources list"
+in `revol.toml`, so even the dominant-language files require a manual move,
 just without a language conflict to resolve first). `conflicting_sources`
 (minority-language files) are excluded from the primary migration path
 entirely and surfaced as TODOs — see below.
@@ -143,35 +143,35 @@ entirely and surfaced as TODOs — see below.
 ## Graceful Error Recovery
 
 The tool's central guarantee, stated directly in the module doc comment, is
-that `deft migrate` **must never abort on a mixed-language project** or on
+that `revol migrate` **must never abort on a mixed-language project** or on
 any CMake construct it doesn't understand — every unmapped element is
-preserved as an explicit, human-readable TODO in the generated `deft.toml`
+preserved as an explicit, human-readable TODO in the generated `revol.toml`
 rather than triggering a panic or hard error. Three categories of "unmapped"
 input are handled this way:
 
 **1. Unmapped link libraries.** CMake's `target_link_libraries` gives bare
 library/target names (`mylib`, `pthread`, `Boost::filesystem`) that have no
-automatic mapping to deft's `gh:user/lib` dependency shorthand — deft cannot
+automatic mapping to revol's `gh:user/lib` dependency shorthand — revol cannot
 guess a GitHub repository from a bare name. Every captured name becomes a
 commented-out, ready-to-uncomment-and-edit line:
 
 ```toml
 [dependencies]
-# TODO: map these CMake target_link_libraries to deft `gh:user/lib` deps
-# (deft cannot infer a repository from a bare library name):
+# TODO: map these CMake target_link_libraries to revol `gh:user/lib` deps
+# (revol cannot infer a repository from a bare library name):
 # "gh:<user>/mylib" = "x.y.z"  # was: mylib
 ```
 
 **2. Unmapped (minority-language) source files.** The `conflicting_sources`
 computed above are rendered as a dedicated TODO block at the end of the
 manifest, naming the dominant/excluded languages, the exact file list, and
-the structural reason (deft's one-language-per-package rule):
+the structural reason (revol's one-language-per-package rule):
 
 ```toml
 # TODO: Manually resolve mixed-language translation units
-# deft enforces one language per package; C++ was chosen as the
+# revol enforces one language per package; C++ was chosen as the
 # dominant language by source count. These C source(s) were excluded
-# from this migration and need a plan (e.g. a sibling deft package):
+# from this migration and need a plan (e.g. a sibling revol package):
 #   - legacy/parser.c
 #   - legacy/util.c
 ```
@@ -185,17 +185,17 @@ match is recorded in `complex_hits` and surfaced as a **runtime note**
 location/value to anchor a TODO comment to):
 
 ```
-note: CMakeLists.txt uses constructs deft does not parse (foreach, function).
+note: CMakeLists.txt uses constructs revol does not parse (foreach, function).
 Review the file manually for logic not captured above.
 ```
 
 None of this — a mixed-language project, an unrecognized library name, or an
-unparsed `foreach` loop — ever causes `deft migrate` to return an `Err` or
+unparsed `foreach` loop — ever causes `revol migrate` to return an `Err` or
 panic. The only conditions that actually fail the command outright are: an
 unsupported `--from` value, a missing `CMakeLists.txt` at the resolved path,
-or a `deft.toml` that already exists at the destination (overwrite
-protection, mirroring `deft init`'s same check — see
-[cli.md](cli.md#deft-init)).
+or a `revol.toml` that already exists at the destination (overwrite
+protection, mirroring `revol init`'s same check — see
+[cli.md](cli.md#revol-init)).
 
 ## Diagnostic Feedback
 
@@ -206,10 +206,10 @@ visibility guarantees:
 Printed only when `!quiet`:
 - If any dominant-language sources were detected, a note listing them and
   the exact strict-layout entry file path they need to be manually moved
-  into (deft has no sources list — moving files in is unavoidable manual
+  into (revol has no sources list — moving files in is unavoidable manual
   work even for successfully-migrated projects):
   ```
-  note: deft uses a strict layout — there is no "sources" list in deft.toml.
+  note: revol uses a strict layout — there is no "sources" list in revol.toml.
   Move/merge these detected sources into src/main.cpp by hand:
            - main.cpp
            - app.cpp
@@ -218,7 +218,7 @@ Printed only when `!quiet`:
   `complex_hits` note shown above.
 
 **The unmapped-source warning (`print_unmapped_warning`, stderr,
-unconditional).** This is the one diagnostic deft prints **even under
+unconditional).** This is the one diagnostic revol prints **even under
 `--quiet`** — the module doc comment explains why: "Mixed-language fallout is
 always reported, even under `--quiet`: it lists exactly what the migration
 could NOT map automatically, which is the one thing a user re-running this
@@ -228,13 +228,13 @@ non-interactively still needs to see." It only fires when
 ```
 warning: mixed-language CMake project detected — C++ was chosen as the
 dominant language (3 C++ vs. 2 C source file(s)). The following C file(s)
-could not be mapped automatically and were left as TODOs in deft.toml:
+could not be mapped automatically and were left as TODOs in revol.toml:
            - legacy/parser.c
            - legacy/util.c
 ```
 
 This asymmetry — informational layout guidance is quiet-suppressible,
-structural data-loss-risk warnings are not — mirrors deft's general
+structural data-loss-risk warnings are not — mirrors revol's general
 philosophy that `-q` controls progress *noise*, never correctness-relevant
 information (the same principle that keeps hard errors visible under `-q`
 across every other command; see [cli.md](cli.md#global-constraints)).
@@ -243,8 +243,8 @@ After migration, the recommended next steps for a developer are, in order:
 1. Move the listed dominant-language source files into the strict-layout
    entry path noted by `print_notices`.
 2. Resolve the `# TODO` blocks for unmapped dependencies and
-   conflicting-language sources in the generated `deft.toml`.
+   conflicting-language sources in the generated `revol.toml`.
 3. Manually review `CMakeLists.txt` for any logic guarded by the
    `complex_hits` keywords, since none of that control flow was translated.
-4. Run `deft build` (or `deft doctor` first, if uncertain about the local
+4. Run `revol build` (or `revol doctor` first, if uncertain about the local
    toolchain) to validate the migrated package.

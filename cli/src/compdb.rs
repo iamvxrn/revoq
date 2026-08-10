@@ -1,8 +1,8 @@
 //! Compilation database (`compile_commands.json`) generation.
 //!
-//! Every successful `deft build` writes a clangd-compatible compilation
+//! Every successful `revol build` writes a clangd-compatible compilation
 //! database to the project root, so IDEs and language servers (VS Code,
-//! Neovim, CLion, ...) pick up deft's exact standard version, warnings,
+//! Neovim, CLion, ...) pick up revol's exact standard version, warnings,
 //! defines, and include paths with zero manual configuration. See
 //! <https://clang.llvm.org/docs/JSONCompilationDatabase.html> for the format.
 
@@ -16,13 +16,13 @@ use crate::json::Json;
 #[derive(Debug, Clone)]
 pub struct CompileCommandEntry {
     /// The absolute working directory the compiler was (would be) invoked
-    /// from — deft always runs clang with its own inherited cwd, so this is
+    /// from — revol always runs clang with its own inherited cwd, so this is
     /// the same value for every entry in a given build.
     pub directory: PathBuf,
     /// The translation unit's source file, exactly as passed to clang.
     pub file: PathBuf,
     /// The full argument vector, compiler executable included
-    /// (`clang`/`clang++` first, then every flag deft generated for this
+    /// (`clang`/`clang++` first, then every flag revol generated for this
     /// unit — standard, optimization, warnings, includes, defines, `-o` and
     /// the object path, then the source path).
     pub arguments: Vec<String>,
@@ -53,7 +53,7 @@ impl CompileCommandEntry {
 }
 
 /// Write `compile_commands.json` to `root`, overwriting any file already
-/// there. Pretty-printed since, unlike deft's `--json` payloads, this file
+/// there. Pretty-printed since, unlike revol's `--json` payloads, this file
 /// is meant to be inspected and diffed by humans as well as tools.
 pub fn write(root: &Path, entries: &[CompileCommandEntry]) -> Result<()> {
     let doc = Json::Array(entries.iter().map(CompileCommandEntry::to_json).collect());
@@ -69,7 +69,7 @@ mod tests {
 
     fn temp_dir(label: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("deft-compdb-test-{label}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("revol-compdb-test-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

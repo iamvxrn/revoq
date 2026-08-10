@@ -2,7 +2,7 @@
 title: "Code of Conduct"
 ---
 
-deft is a small, friendly project, and the short version is: be decent to each
+revol is a small, friendly project, and the short version is: be decent to each
 other. Bring good faith, assume it in others, and keep it constructive — even
 when you disagree.
 

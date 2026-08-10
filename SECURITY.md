@@ -2,7 +2,7 @@
 
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability within Deft, please report it privately to the maintainer rather than opening a public issue.
+If you discover a security vulnerability within Revol, please report it privately to the maintainer rather than opening a public issue.
 
 ### Contact
 - **Maintainer**: xntas

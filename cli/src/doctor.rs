@@ -1,9 +1,9 @@
-//! `deft doctor` — environment and toolchain diagnostics.
+//! `revol doctor` — environment and toolchain diagnostics.
 //!
-//! These checks are deliberately kept OUT of `deft build`'s hot path: a build
+//! These checks are deliberately kept OUT of `revol build`'s hot path: a build
 //! that already has a valid environment should not pay for probing it on
 //! every invocation. Diagnostics run only when the user explicitly asks
-//! (`deft doctor`) or when a build has just failed, at which point a slow,
+//! (`revol doctor`) or when a build has just failed, at which point a slow,
 //! thorough check is the right trade — the user is already stopped and wants
 //! to know why.
 
@@ -37,7 +37,7 @@ pub fn run(verbose: bool, json: bool) -> Result<()> {
         check_git(),
         check_fetch_tool(),
         check_system_headers(),
-        check_deft_home(),
+        check_revol_home(),
     ];
     if let Some(toolchain) = check_toolchain_pin() {
         checks.push(toolchain);
@@ -52,7 +52,7 @@ pub fn run(verbose: bool, json: bool) -> Result<()> {
 }
 
 fn print_report(checks: &[Check], verbose: bool) {
-    println!("\x1b[1;36mdeft doctor\x1b[0m — environment diagnostics\n");
+    println!("\x1b[1;36mrevol doctor\x1b[0m — environment diagnostics\n");
 
     let mut passed = 0usize;
     for c in checks {
@@ -71,12 +71,12 @@ fn print_report(checks: &[Check], verbose: bool) {
     println!();
     if failed == 0 {
         println!(
-            "\x1b[1;32mAll {} checks passed.\x1b[0m Your environment is ready for `deft build`.",
+            "\x1b[1;32mAll {} checks passed.\x1b[0m Your environment is ready for `revol build`.",
             checks.len()
         );
     } else {
         println!(
-            "\x1b[1;33m{passed} passed, {failed} failed.\x1b[0m Fix the items above, then re-run `deft doctor`."
+            "\x1b[1;33m{passed} passed, {failed} failed.\x1b[0m Fix the items above, then re-run `revol doctor`."
         );
     }
     if verbose {
@@ -121,7 +121,7 @@ fn print_json_report(checks: &[Check]) {
     println!("{}", build_json_report(checks).render());
 }
 
-/// If the current directory has a `deft.toml` with a `[package] toolchain`
+/// If the current directory has a `revol.toml` with a `[package] toolchain`
 /// pin, validate it against the active compiler. Returns `None` (no check
 /// emitted) when there's no project here or no pin declared — `doctor`
 /// otherwise stays project-agnostic, matching every other check above.
@@ -154,7 +154,7 @@ fn check_toolchain_pin() -> Option<Check> {
             ok: false,
             detail: e.to_string(),
             fix: Some(format!(
-                "install/select {} {} (or update [package] toolchain in deft.toml)",
+                "install/select {} {} (or update [package] toolchain in revol.toml)",
                 spec.compiler, spec.version
             )),
         },
@@ -280,7 +280,7 @@ fn check_fetch_tool() -> Check {
         detail: "neither curl nor wget found on PATH".to_string(),
         fix: Some(
             "install curl (e.g. `sudo apt install curl`, `brew install curl`) — \
-             required for `deft sync` and dependency reachability probing"
+             required for `revol sync` and dependency reachability probing"
                 .into(),
         ),
     }
@@ -291,7 +291,7 @@ fn check_fetch_tool() -> Check {
 /// cover (a broken sysroot or missing libc headers still fails builds).
 fn check_system_headers() -> Check {
     let dir = std::env::temp_dir();
-    let probe_src = dir.join(format!("deft-doctor-{}.c", std::process::id()));
+    let probe_src = dir.join(format!("revol-doctor-{}.c", std::process::id()));
     let probe_obj = probe_src.with_extension("o");
 
     if std::fs::write(
@@ -348,17 +348,17 @@ fn check_system_headers() -> Check {
     }
 }
 
-fn check_deft_home() -> Check {
-    let home = match std::env::var("DEFT_HOME") {
+fn check_revol_home() -> Check {
+    let home = match std::env::var("REVOL_HOME") {
         Ok(h) if !h.is_empty() => PathBuf::from(h),
         _ => match std::env::var("HOME") {
-            Ok(h) if !h.is_empty() => PathBuf::from(h).join(".deft"),
+            Ok(h) if !h.is_empty() => PathBuf::from(h).join(".revol"),
             _ => {
                 return Check {
-                    name: "deft home",
+                    name: "revol home",
                     ok: false,
-                    detail: "neither $DEFT_HOME nor $HOME is set".to_string(),
-                    fix: Some("export HOME (or DEFT_HOME) so deft can locate its cache".into()),
+                    detail: "neither $REVOL_HOME nor $HOME is set".to_string(),
+                    fix: Some("export HOME (or REVOL_HOME) so revol can locate its cache".into()),
                 };
             }
         },
@@ -366,14 +366,14 @@ fn check_deft_home() -> Check {
 
     if home.is_dir() {
         Check {
-            name: "deft home",
+            name: "revol home",
             ok: true,
             detail: home.display().to_string(),
             fix: None,
         }
     } else {
         Check {
-            name: "deft home",
+            name: "revol home",
             ok: true,
             detail: format!("{} (will be created on first build)", home.display()),
             fix: None,
@@ -443,12 +443,12 @@ mod tests {
         assert!(rendered.contains("\"checks\":[]"));
     }
 
-    /// `doctor` stays project-agnostic by default: with no `deft.toml`
+    /// `doctor` stays project-agnostic by default: with no `revol.toml`
     /// reachable (or none declaring a `toolchain` pin), no check is emitted
     /// at all — not a failing one.
     #[test]
     fn toolchain_check_is_absent_without_a_pinned_manifest() {
-        // This crate's own repo root has no deft.toml, so running the test
+        // This crate's own repo root has no revol.toml, so running the test
         // suite from anywhere under it must see no pin.
         assert!(check_toolchain_pin().is_none());
     }

@@ -2,7 +2,7 @@
 
 All notable changes to this project.
 
-> deft is an experiment in what an AI can build for the C/C++ tooling world —
+> revol is an experiment in what an AI can build for the C/C++ tooling world —
 > "Cargo, but for C and C++." Useful, not production-hardened.
 
 ## [0.7.2] - 2026-07-22
@@ -49,26 +49,26 @@ A correctness release around dependency versioning.
   `gh:` dependency needs its own version tags, which a monorepo subdirectory
   can't carry — so `libs/json/` is removed from the monorepo and the example app
   depends on the standalone repo the normal way (`"gh:xntas/json" = "3.12.0"`),
-  with its `deft.lock` pinned to that tag's commit. (The example no longer
+  with its `revol.lock` pinned to that tag's commit. (The example no longer
   vendors json into `third_party/`.)
-- **The registry index now lives at `website/static/deft-libs`.** `deft sync`'s
-  default URL is `raw.githubusercontent.com/xntas/deft/main/website/static/deft-libs`
-  (still overridable via `DEFT_LIBS_URL`). One file, two consumers: the CLI
-  fetches it, and the website serves it (at `/deft-libs`) and renders its entries
+- **The registry index now lives at `website/static/revol-libs`.** `revol sync`'s
+  default URL is `raw.githubusercontent.com/xntas/revol/main/website/static/revol-libs`
+  (still overridable via `REVOL_LIBS_URL`). One file, two consumers: the CLI
+  fetches it, and the website serves it (at `/revol-libs`) and renders its entries
   on the **Packages** page — so the registry and the site can never drift.
 
 ## [0.7.0] - 2026-07-22
 
-The **migration** release. 0.6 let deft build "almost-canonical" trees; 0.7
+The **migration** release. 0.6 let revol build "almost-canonical" trees; 0.7
 removes the two barriers that still forced you to restructure a real CMake
 project by hand. Tested against cJSON and fmt: both now build from a handful of
 manifest lines, no files moved. Strict defaults are unchanged — a stock
-`deft init` project builds byte-for-byte as before.
+`revol init` project builds byte-for-byte as before.
 
 ### Added
 
 - **`[package] kind`** (`"bin"` / `"lib"`) — drop the requirement for a
-  canonically named `main.*`/`lib.*` entry file. With `kind` set, deft builds a
+  canonically named `main.*`/`lib.*` entry file. With `kind` set, revol builds a
   directory of arbitrarily-named sources (a real library's `cJSON.c`,
   `format.cc`) as the declared artifact, inferring the language from the sources.
   Unset keeps the strict entry-file behavior. Accepts `bin`/`exe`/`executable`
@@ -78,7 +78,7 @@ manifest lines, no files moved. Strict defaults are unchanged — a stock
   longer drags its `tests/`, `examples/`, and fuzzers into your library.
   `exclude` prunes whole directories; `include`, when set, keeps only matching
   files. A small dependency-free matcher (`src/glob.rs`) supports `*`, `?`, and
-  `**` — no new crate, in keeping with deft's zero-dependency stance.
+  `**` — no new crate, in keeping with revol's zero-dependency stance.
 
 ### Changed
 
@@ -95,18 +95,18 @@ manifest lines, no files moved. Strict defaults are unchanged — a stock
 
 ## [0.6.0] - 2026-07-22
 
-The **Legacy Support** release. deft stays strict by default, but a handful of
+The **Legacy Support** release. revol stays strict by default, but a handful of
 opt-in `[package]` fields now let it build real-world trees that don't follow
 the layout — without you rearranging a single file. Every default reproduces
 0.5.0 behavior byte-for-byte.
 
 ### Added
 
-- **`[package] source_dir`** — the directory deft scans for sources. Defaults to
+- **`[package] source_dir`** — the directory revol scans for sources. Defaults to
   `"src"`, so existing manifests are unaffected. For legacy trees whose code
   lives elsewhere.
-- **`deft build --from <path>`** — override `source_dir` from the command line
-  for a one-off build (also inherited by `deft run`). Precedence:
+- **`revol build --from <path>`** — override `source_dir` from the command line
+  for a one-off build (also inherited by `revol run`). Precedence:
   `--from` > `[package] source_dir` > `"src"`.
 - **`[package] include_dirs`** — extra header search directories (relative to
   the package root), emitted as `-I<path>` to every translation unit, searched
@@ -114,7 +114,7 @@ the layout — without you rearranging a single file. Every default reproduces
 - **`[package] defines`** — project-wide preprocessor defines applied to *both*
   C and C++ units as `-D<entry>`, additive to the per-language
   `[profile.c]`/`[profile.cpp]` `defines`.
-- **`[package] ignore_warnings`** and **`deft build --ignore-warnings`** — inject
+- **`[package] ignore_warnings`** and **`revol build --ignore-warnings`** — inject
   `-w` to silence every compiler warning; a blunt escape hatch for noisy code
   you don't own. Either the manifest field or the CLI flag turns it on.
 - **Extended source/entry extensions.** The scanner and entry-point discovery
@@ -125,38 +125,38 @@ the layout — without you rearranging a single file. Every default reproduces
 
 ### Changed
 
-- **New home: the project is now a monorepo at `github.com/xntas/deft`.** The
-  former `deft-cli/{deft,website,example-app}` repositories are consolidated
+- **New home: the project is now a monorepo at `github.com/xntas/revol`.** The
+  former `revol-cli/{revol,website,example-app}` repositories are consolidated
   (history preserved) under `cli/`, `website/`, and `examples/example-app/`. The
   website's Cloudflare Pages deployment now builds from the `website/`
   subdirectory. (The `json` library keeps its own repo — see 0.7.1.)
-- **Package index moved into the monorepo.** `deft sync`'s default index URL
-  points at the `deft-libs` file inside `xntas/deft`, still overridable via
-  `DEFT_LIBS_URL`. (Its exact path is refined in 0.7.1.)
+- **Package index moved into the monorepo.** `revol sync`'s default index URL
+  points at the `revol-libs` file inside `xntas/revol`, still overridable via
+  `REVOL_LIBS_URL`. (Its exact path is refined in 0.7.1.)
 
 ### Notes
 
 - The single-language rule is unchanged: a package containing both C and C++
-  sources is still rejected. Legacy support widens *where* and *what* deft
+  sources is still rejected. Legacy support widens *where* and *what* revol
   looks for, not the one-package-one-language invariant.
 
 ## [0.5.0] - 2026-07-02
 
 ### Added
 
-- **Automatic `compile_commands.json` generation.** Every successful `deft
+- **Automatic `compile_commands.json` generation.** Every successful `revol
   build` now writes a clangd-compatible compilation database to the project
   root — no flag required. `clangd` (VS Code, Neovim, CLion, ...) picks it up
   automatically, giving accurate autocomplete, go-to-definition, and diagnostics
-  that exactly match deft's own compile flags (standard, warnings, defines,
+  that exactly match revol's own compile flags (standard, warnings, defines,
   include paths). Covers the root package and every dependency built in the
   same invocation; workspace builds merge every member's entries into one
   file. Entries are populated even when a library is served from the global
   build cache, since the compile flags are fully determined without actually
   invoking the compiler (`src/compdb.rs`).
-- **`deft build --trace`: Clang time-trace profiling.** Injects `-ftime-trace`
+- **`revol build --trace`: Clang time-trace profiling.** Injects `-ftime-trace`
   into every translation unit, then aggregates each unit's individual
-  `-ftime-trace` output into one `target/<profile>/deft_profile.json` —
+  `-ftime-trace` output into one `target/<profile>/revol_profile.json` —
   loadable directly at `chrome://tracing` or
   [speedscope.app](https://www.speedscope.app) — and prints a terminal
   summary of the slowest headers and template instantiations across the
@@ -165,7 +165,7 @@ the layout — without you rearranging a single file. Every default reproduces
   `--trace` profiles the package you're actively working on.
 - **Cross-compilation via `--target`.** A new optional `target` string field
   in `[package]` (e.g. `target = "aarch64-unknown-linux-gnu"`), and a
-  matching `deft build --target <triple>` / `deft check --target <triple>`
+  matching `revol build --target <triple>` / `revol check --target <triple>`
   CLI flag, inject `--target=<triple>` into every compile step *and* the
   final link step — leveraging Clang's native cross-compiler support with no
   separate toolchain to install. The CLI flag always overrides the manifest
@@ -176,14 +176,14 @@ the layout — without you rearranging a single file. Every default reproduces
   Library builds (which go through `ar`/`llvm-ar`, not clang) never receive
   the flag, matching how sanitizer/LTO flags are already excluded from the
   archiver path.
-- **`deft check`: static analysis without a build.** A new subcommand that
+- **`revol check`: static analysis without a build.** A new subcommand that
   runs Clang's analyzer (`--analyze`) over the package's own sources — no
   object files, no linker invocation, no artifact. Findings are streamed
-  through the same colorized diagnostic renderer `deft build` already uses,
+  through the same colorized diagnostic renderer `revol build` already uses,
   per file, as each one finishes. Only a file the analyzer couldn't even
   parse (a real syntax error, a missing header) fails the command; analyzer
   findings on an otherwise-clean parse are printed and the command still
-  exits `0`, the same "warnings don't fail the build" contract `deft build`
+  exits `0`, the same "warnings don't fail the build" contract `revol build`
   has. Dependencies are resolved just far enough to expose their headers on
   the include path — never compiled or analyzed themselves. Runs across the
   same parallel thread-pool shape as a real build (`-j` to tune).
@@ -192,11 +192,11 @@ the layout — without you rearranging a single file. Every default reproduces
   strings with escapes, numbers, bools, and null) added alongside the
   existing writer, plus an indented pretty-printer for human-facing
   artifacts. Used internally to read Clang's `-ftime-trace` output and to
-  write `compile_commands.json` — deft's zero-dependency footprint
+  write `compile_commands.json` — revol's zero-dependency footprint
   (`clap`/`serde`/`toml` only, no `serde_json`) is unchanged; see
   [docs/guides/architecture.md](docs/guides/architecture.md).
-- `DeftError::Analysis { failures }` (`error.rs`): a dedicated error variant
-  for `deft check` failures, so the top-line message reads `check failed: N
+- `RevolError::Analysis { failures }` (`error.rs`): a dedicated error variant
+  for `revol check` failures, so the top-line message reads `check failed: N
   file(s) could not be analyzed` instead of the misleading `build failed:
   ...` a shared variant would have produced.
 
@@ -211,7 +211,7 @@ the layout — without you rearranging a single file. Every default reproduces
   paths aggregate them across every package built in one invocation.
 - `Compiler::new` gained a `target: Option<String>` parameter. Flag
   injection was refactored into `push_diagnostics_and_includes` — a smaller
-  helper shared by real compiles, `deft check`'s analysis pass, and (via
+  helper shared by real compiles, `revol check`'s analysis pass, and (via
   `cache_fingerprint`) the global build cache's fingerprint, so `--target`,
   once set, is automatically reflected everywhere a compile flag needs to be
   consistent, including cache-key correctness (a cross-compiled build's
@@ -227,7 +227,7 @@ the layout — without you rearranging a single file. Every default reproduces
   message` format as ordinary warnings, so no diagnostics-parsing changes
   were needed to support it.
 - `jobs(args: &BuildArgs)` was split into a shared `resolve_jobs(explicit:
-  Option<usize>)`, used by both `deft build`/`deft run` and `deft check`.
+  Option<usize>)`, used by both `revol build`/`revol run` and `revol check`.
 
 ## [0.4.0] - 2026-07-01
 
@@ -261,29 +261,29 @@ the layout — without you rearranging a single file. Every default reproduces
 
 ### Added
 
-- Global build cache at `~/.deft/cache/prebuilt/{hash}`: library packages
+- Global build cache at `~/.revol/cache/prebuilt/{hash}`: library packages
   (dependencies, and the root package when it's a library) whose sources,
   compiler flags, and target OS/arch hash identically to a previous build
   are copied straight from the cache, skipping the compile thread-pool
   entirely. Hashing is a small dependency-free module (`src/hash.rs`) built
   on `std::hash::Hasher`.
-- `--json` global flag for `deft build` and `deft doctor`, emitting one
+- `--json` global flag for `revol build` and `revol doctor`, emitting one
   compact, structured JSON object on stdout instead of human-readable text —
   build status/duration/cache-hit counts/compiler diagnostics, and an
   environment check matrix, respectively. Serialized with a small
   dependency-free encoder (`src/json.rs`) rather than `serde_json`.
-- `deft vendor` subcommand: copies every dependency in `deft.lock` into a
-  local `third_party/` tree. Once populated, `deft build` resolves
+- `revol vendor` subcommand: copies every dependency in `revol.lock` into a
+  local `third_party/` tree. Once populated, `revol build` resolves
   dependencies from it directly — no git, no network, no global cache
   lookups — for fully offline/autonomous builds.
 - `toolchain` field in `[package]` (e.g. `toolchain = "clang-18.1"`):
-  `deft doctor` and the pre-build phase of `deft build` invoke the pinned
+  `revol doctor` and the pre-build phase of `revol build` invoke the pinned
   compiler and abort with a descriptive error if its reported version
   doesn't match.
 
 ### Changed
 
-- `deft doctor`'s report (human and `--json`) now includes a `toolchain`
+- `revol doctor`'s report (human and `--json`) now includes a `toolchain`
   check when the current directory's manifest declares a pin; otherwise the
   report is unchanged.
 - `build_dependencies` no longer takes an unused `Resolver` parameter.

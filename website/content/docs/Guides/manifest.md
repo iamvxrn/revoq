@@ -2,11 +2,11 @@
 title: "Manifest & Lockfile Specification"
 ---
 
-The absolute structural specification for `deft.toml` and `deft.lock`, drawn
+The absolute structural specification for `revol.toml` and `revol.lock`, drawn
 directly from the serde data model in [manifest.rs](../src/manifest.rs) and
 the layout rules in [engine.rs](../src/engine.rs).
 
-## `deft.toml` Spec
+## `revol.toml` Spec
 
 The root deserialization target is `Manifest`:
 
@@ -25,7 +25,7 @@ all but `package`, and `package` itself is `Option<Package>`) — a manifest
 with none of these tables still parses successfully. `package` is only
 required at the point a package is actually *built*: `require_package` in
 [engine.rs](../src/engine.rs) turns a missing `[package]` table into
-`DeftError::ManifestParse { message: "missing [package] table (name/version
+`RevolError::ManifestParse { message: "missing [package] table (name/version
 required to build)" }`. This split lets a workspace root manifest declare
 only `[workspace]` with no `[package]` of its own.
 
@@ -76,11 +76,11 @@ default, so a pre-0.6.0 manifest parses and builds identically.
 
 ### Legacy support — `source_dir`, `include_dirs`, `defines`, `ignore_warnings`
 
-These four fields let deft build C/C++ trees that don't follow its strict
+These four fields let revol build C/C++ trees that don't follow its strict
 layout, without moving any files. Every default reproduces the 0.5.0 behavior.
 
-- **`source_dir`** (default `"src"`) — the directory deft scans for sources and
-  the entry point. `deft build --from <path>` overrides it for a single
+- **`source_dir`** (default `"src"`) — the directory revol scans for sources and
+  the entry point. `revol build --from <path>` overrides it for a single
   invocation; precedence is `--from` > `source_dir` > `"src"`. The entry point
   still has to be `main.<ext>` or `lib.<ext>` — only the directory changes.
 - **`include_dirs`** (default `[]`) — extra header search paths (relative to the
@@ -89,9 +89,9 @@ layout, without moving any files. Every default reproduces the 0.5.0 behavior.
   **both** C and C++ units as `-D<entry>`, additive to the per-language
   `[profile]` `defines`.
 - **`ignore_warnings`** (default `false`) — inject `-w` to disable every warning.
-  `deft build --ignore-warnings` does the same from the CLI. `-w` overrides the
+  `revol build --ignore-warnings` does the same from the CLI. `-w` overrides the
   profile's `-W` groups but not `extra_flags`, and is never applied to
-  `deft check`.
+  `revol check`.
 
 The scanner and entry-point discovery accept `.c`, `.cpp`, `.cc`, `.cxx`, and
 `.C`; a capital `.C` is **C++** (Unix/Clang convention). `.c` compiles with
@@ -104,7 +104,7 @@ you build a real third-party project without moving a single file.
 
 - **`kind`** (`"bin"` or `"lib"`) drops the requirement for a canonically named
   entry file. A library's sources are called `cJSON.c` or `format.cc`, never
-  `lib.c`; declare `kind` and deft builds the directory as that artifact,
+  `lib.c`; declare `kind` and revol builds the directory as that artifact,
   inferring the language from the sources. Leave it unset and the strict
   `main.*`/`lib.*` discovery is exactly as before.
 - **`include` / `exclude`** are glob patterns (relative to `source_dir`) that
@@ -131,23 +131,23 @@ exclude    = ["tests/**", "fuzzing/**"]
 `"clang-18.1"`. `ToolchainSpec::parse` ([manifest.rs](../src/manifest.rs))
 splits on the first `-`, so `compiler = "clang"` and `version = "18.1"`.
 Both halves are required and must be non-empty; an unparsable spec (no `-`,
-or an empty compiler/version half) fails fast with `DeftError::Config`
+or an empty compiler/version half) fails fast with `RevolError::Config`
 *before* any compiler is invoked.
 
 When present, `toolchain` is validated in two places:
 
-- **`deft doctor`** — `check_toolchain_pin` ([doctor.rs](../src/doctor.rs))
-  loads `deft.toml` from the current directory; if it declares a pin, doctor
+- **`revol doctor`** — `check_toolchain_pin` ([doctor.rs](../src/doctor.rs))
+  loads `revol.toml` from the current directory; if it declares a pin, doctor
   invokes `<compiler> --version` and adds one more row (`toolchain`) to the
   report. No project here, or no pin declared, means no row at all — doctor
   stays project-agnostic by default, same as every other check.
-- **The pre-build phase of `deft build`** — `build_single` ([main.rs](../src/main.rs))
+- **The pre-build phase of `revol build`** — `build_single` ([main.rs](../src/main.rs))
   calls `ToolchainSpec::validate()` immediately after loading `[package]`,
   before dependency resolution or compilation begins. A mismatch aborts the
-  build with a descriptive `DeftError::Config`, e.g.:
+  build with a descriptive `RevolError::Config`, e.g.:
   ```
   environment unvalidated: manifest pins toolchain 'clang-18.1' but found 'clang 17.0.6'
-  (run `deft doctor` for details)
+  (run `revol doctor` for details)
   ```
 
 **Version matching is a dotted-prefix match, not exact equality.** `validate`
@@ -160,24 +160,24 @@ and, importantly, rejects `"18.10.x"` too, since the prefix check requires
 the separator dot (`"18.1."`), not just a string prefix.
 
 This check is strictly opt-in: a manifest with no `toolchain` field pays
-zero extra cost — `deft build`'s hot path is unaffected (see
+zero extra cost — `revol build`'s hot path is unaffected (see
 [architecture.md](architecture.md#hot-path-strategy)).
 
 ### `target` — cross-compilation
 
 `target` is an optional cross-compilation target triple, e.g.
 `"aarch64-unknown-linux-gnu"` or `"wasm32-unknown-unknown"`. Unlike
-`toolchain`, it's a raw, unvalidated string: deft passes it straight through
+`toolchain`, it's a raw, unvalidated string: revol passes it straight through
 as `--target=<triple>` and lets clang itself reject an unrecognized or
 unsupported triple, the same pass-through contract `extra_flags` already
 has. Validating a triple up front would mean either hardcoding a triple list
 (perpetually incomplete) or shelling out to `clang --print-targets` on every
 invocation — the latter conflicts with the hot-path guarantee (see
-[architecture.md](architecture.md#hot-path-strategy)), so deft doesn't.
+[architecture.md](architecture.md#hot-path-strategy)), so revol doesn't.
 
 `--target=<triple>` is injected into **both** phases that need to agree on
 architecture/ABI: every translation unit's compile command
-(`Compiler::push_diagnostics_and_includes`, shared with `deft check`'s
+(`Compiler::push_diagnostics_and_includes`, shared with `revol check`'s
 analysis path) and the final executable link command
 (`Compiler::link_command`). It's deliberately *not* passed to the archiver —
 `ar`/`llvm-ar` bundle object files without inspecting their target, so
@@ -185,7 +185,7 @@ library builds never see it there (the same reasoning that already excludes
 `-fsanitize=`/`-flto` from the archiver path, see
 [sanitizers and lto](#sanitizers-and-lto--clang-sanitizer-support) above).
 
-**Priority.** `deft build --target <triple>` (the CLI flag) always overrides
+**Priority.** `revol build --target <triple>` (the CLI flag) always overrides
 this manifest field when both are set (`effective_target` in
 [main.rs](../src/main.rs)). Neither set means a fully native build — no
 `--target` flag reaches clang at all, byte-for-byte identical to a pre-0.5.0
@@ -203,7 +203,7 @@ work, so consistency has to win over a dependency's own preference.
 
 **Cache interaction.** `--target` is injected inside the same helper
 `Compiler::cache_fingerprint` calls, so a cross-compiled build's global-cache
-key (see [Global build cache](cli.md#deft-build)) is always distinct from a
+key (see [Global build cache](cli.md#revol-build)) is always distinct from a
 native build of the same library — the two can never collide and serve the
 wrong architecture's cached archive.
 
@@ -224,8 +224,8 @@ pub struct Workspace {
 **and** `members` is non-empty — a `[workspace]` table with an empty or
 absent `members` list is treated as not a workspace at all. Each member path
 is resolved relative to the workspace root and must itself be a complete
-deft-standard package (own `deft.toml`, own `src/` layout) — see
-[cli.md](cli.md#deft-build) for the build-order semantics.
+revol-standard package (own `revol.toml`, own `src/` layout) — see
+[cli.md](cli.md#revol-build) for the build-order semantics.
 
 ### `[features]`
 
@@ -279,7 +279,7 @@ entirely from a C++ package's manifest is normal and harmless.
 lazily by `OptLevel::parse` ([compiler.rs](../src/compiler.rs)) only at build
 time — accepted values are `"0"`, `"1"`, `"2"`, `"3"`, `"s"`/`"size"`,
 `"z"`/`"tiny"`, `"g"`/`"debug"`, `"fast"`. An unrecognized value produces
-`DeftError::Config` *before* any compilation begins
+`RevolError::Config` *before* any compilation begins
 (`Compiler::validate()` is called up front in `Engine::build_package`), not
 mid-build.
 
@@ -287,12 +287,12 @@ mid-build.
 `"all"` → `-Wall`, `"extra"` → `-Wextra`, `"error"` → `-Werror`,
 `"pedantic"` → `-Wpedantic`, `"everything"` → `-Weverything`; any other
 string `kw` passes through verbatim as `-W<kw>`, so any clang warning group
-can be named without deft needing an exhaustive table.
+can be named without revol needing an exhaustive table.
 
 `extra_flags` is an escape hatch: each string is appended to the clang
-invocation verbatim, after all other deft-managed flags, normally left empty.
+invocation verbatim, after all other revol-managed flags, normally left empty.
 
-`defines` entries become `-D<entry>` flags, alongside the `-D` flags deft
+`defines` entries become `-D<entry>` flags, alongside the `-D` flags revol
 synthesizes itself for active features (see below) — both sets are merged in
 `push_common`.
 
@@ -300,7 +300,7 @@ synthesizes itself for active features (see below) — both sets are merged in
 equivalent, since these are C++ language features. `false` maps to
 `-fno-rtti`/`-fno-exceptions`; `true` (the default for both) maps to
 `-frtti`/`-fexceptions`. This field-level asymmetry between `CProfile` and
-`CppProfile` is itself part of deft's compiler boundary isolation — see
+`CppProfile` is itself part of revol's compiler boundary isolation — see
 [architecture.md](architecture.md#compiler-boundary-isolation).
 
 ### `sanitizers` and `lto` — Clang sanitizer support
@@ -323,7 +323,7 @@ manifest, with zero behavioral change. Each entry maps through
 | `"undefined"` | `Sanitizer::Undefined` | `-fsanitize=undefined` |
 | `"leak"` | `Sanitizer::Leak` | `-fsanitize=leak` |
 
-An unrecognized string (anything else) fails with `DeftError::Config` at
+An unrecognized string (anything else) fails with `RevolError::Config` at
 validation time, before any compilation begins — same fail-fast contract as
 `optimization`.
 
@@ -331,7 +331,7 @@ validation time, before any compilation begins — same fail-fast contract as
 `validate_sanitizer_matrix` against each profile independently (C's
 `sanitizers`/`lto` and C++'s `sanitizers`/`lto` are checked separately, since
 a package only ever builds one of the two) and aborts the build with a
-`DeftError::Config` before invoking clang at all if:
+`RevolError::Config` before invoking clang at all if:
 
 - **`lto = true`** together with `"address"` or `"leak"` in `sanitizers` — LTO
   and ASan/LSan are mutually exclusive: link-time optimization can reorder
@@ -467,16 +467,16 @@ preprocessor define via `Compiler::new`:
 ```rust
 let feature_defines = active_features
     .iter()
-    .map(|f| format!("DEFT_FEATURE_{}", f.to_ascii_uppercase().replace('-', "_")))
+    .map(|f| format!("REVOL_FEATURE_{}", f.to_ascii_uppercase().replace('-', "_")))
     .collect();
 ```
 
-So a feature named `ssl-support` becomes `-DDEFT_FEATURE_SSL_SUPPORT`,
+So a feature named `ssl-support` becomes `-DREVOL_FEATURE_SSL_SUPPORT`,
 injected into every translation unit's compile command alongside the
 profile's own `defines` (`push_common` in
 [compiler.rs](../src/compiler.rs)). There is no per-feature include path or
 source-file gating beyond this macro — conditional compilation inside
-sources (`#ifdef DEFT_FEATURE_SSL_SUPPORT`) is the mechanism by which a
+sources (`#ifdef REVOL_FEATURE_SSL_SUPPORT`) is the mechanism by which a
 feature actually changes behavior.
 
 Dependencies currently resolve their **own** default feature set
@@ -484,7 +484,7 @@ independently (`dep_manifest.resolve_features(&[], false)` in
 [main.rs](../src/main.rs) `build_dependencies`) — a consuming package's
 `--features` selection does not yet propagate into its dependencies' builds.
 
-## `deft.lock` Spec
+## `revol.lock` Spec
 
 ```rust
 pub struct Lockfile {
@@ -505,9 +505,9 @@ On disk this serializes (via `#[serde(rename = "dependency")]`) as a flat
 array of TOML tables:
 
 ```toml
-# This file is auto-generated by deft.
+# This file is auto-generated by revol.
 # It records exact resolved versions for reproducible builds.
-# Do not edit by hand; run `deft update` to regenerate.
+# Do not edit by hand; run `revol update` to regenerate.
 
 [[dependency]]
 name = "http_parser"
@@ -523,7 +523,7 @@ the manifest's `[dependencies]` declaration order (the manifest side is
 already a `BTreeMap`, so it's naturally key-sorted; the explicit lock-side
 sort makes the *lock's* ordering independent of any future change to that).
 
-**Role in reproducible builds.** `deft build` calls
+**Role in reproducible builds.** `revol build` calls
 `resolver.resolve_all(manifest, existing_lock.as_ref())`. When a lock entry
 exists for a dependency *and* its recorded `version` still matches the
 manifest's currently-declared version, `Resolver::resolve_one` takes the
@@ -532,16 +532,16 @@ manifest's currently-declared version, `Resolver::resolve_one` takes the
 the SHA isn't present locally) rather than reading the tag's current HEAD.
 Only when there is no lock entry, or the manifest's version string has
 changed, does resolution fall through to `head_sha()` (fresh HEAD of the
-requested tag). This is the mechanism that makes `deft build` immutable
-across machines and over time as long as `deft.lock` is committed: two
-checkouts of the same repository with the same `deft.lock` resolve every
+requested tag). This is the mechanism that makes `revol build` immutable
+across machines and over time as long as `revol.lock` is committed: two
+checkouts of the same repository with the same `revol.lock` resolve every
 dependency to the exact same commit, never a possibly-moved tag.
 
-If no lock exists yet, the very first successful `deft build` writes one
+If no lock exists yet, the very first successful `revol build` writes one
 (`build_single` in [main.rs](../src/main.rs)): `if existing_lock.is_none() &&
 !resolved.is_empty() { ... lock.save(root)?; }` — first-build lock creation is
 implicit; subsequent builds never silently rewrite the lock on their own
-(only `deft update` does that intentionally).
+(only `revol update` does that intentionally).
 
 **Atomic write pattern.** `Lockfile::save`:
 
@@ -552,19 +552,19 @@ fs::rename(&tmp, &path).path_ctx(&path)?;
 ```
 
 The full serialized contents (including the three-line auto-generated-file
-header comment) are written to a sibling `deft.lock.tmp` first, and only the
-final `fs::rename` touches the real `deft.lock` path. `rename` within the
+header comment) are written to a sibling `revol.lock.tmp` first, and only the
+final `fs::rename` touches the real `revol.lock` path. `rename` within the
 same filesystem is atomic at the OS level, so a process interrupted mid-write
 (crash, killed build, disk full) can only ever leave a stale-but-intact
-`.tmp` file behind — the live `deft.lock` is either the previous complete
+`.tmp` file behind — the live `revol.lock` is either the previous complete
 version or the new complete version, never a half-written file. This exact
-pattern (write `.tmp`, then `rename`) is reused for the `~/.deft/deft-libs`
-package index in `deft sync` — see [cli.md](cli.md#deft-sync).
+pattern (write `.tmp`, then `rename`) is reused for the `~/.revol/revol-libs`
+package index in `revol sync` — see [cli.md](cli.md#revol-sync).
 
 ## Directory Layout Standards
 
 `Layout::discover` ([engine.rs](../src/engine.rs)) enforces the **four
-canonical entry file priority queue** — deft never globs `src/` looking for
+canonical entry file priority queue** — revol never globs `src/` looking for
 "a" main file; it checks for exactly these four paths, in this exact
 precedence order, and uses the first one found:
 
@@ -579,7 +579,7 @@ An executable entry (`main.*`) always wins over a library entry
 (`lib.*`) if, somehow, both exist in the same `src/` — the doc comment in
 [engine.rs](../src/engine.rs) states the rationale plainly: "a package with
 `main.*` is runnable." If none of the four exist, the build fails immediately
-with a `DeftError::LayoutViolation` enumerating all four expected paths — this
+with a `RevolError::LayoutViolation` enumerating all four expected paths — this
 check happens before the manifest's `[profile.*]` is even consulted, since
 there is nothing to compile without a discovered entry point.
 
@@ -590,18 +590,18 @@ package's `entry_language`, `Layout::collect_sources` recursively walks
 (matching `entry_language`) or `foreign` (the other language). Headers and
 unrecognized extensions are silently skipped — they're not translation units
 either way. If `foreign` is non-empty, the **entire build is rejected** with
-a `DeftError::LayoutViolation` naming the offending language, the count of
+a `RevolError::LayoutViolation` naming the offending language, the count of
 foreign files, and one example path:
 
 ```
 strict C/C++ separation violated: this is a Cpp package but found 2 C
-source file(s) (e.g. 'src/legacy/util.c'). A deft package is single-language.
+source file(s) (e.g. 'src/legacy/util.c'). A revol package is single-language.
 ```
 
 There is no per-file override or escape hatch for this rule within a single
 package — a project needing both languages must be split into separate
-deft-standard packages (e.g. a workspace with one C member and one C++
+revol-standard packages (e.g. a workspace with one C member and one C++
 member), each independently satisfying the four-file/single-language rule.
 See [migration.md](migration.md#dominant-language-resolution) for how
-`deft migrate` handles pre-existing mixed-language CMake projects under this
+`revol migrate` handles pre-existing mixed-language CMake projects under this
 same constraint.

@@ -83,12 +83,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          stage="deft-${{ matrix.target }}"
+          stage="revol-${{ matrix.target }}"
           mkdir "$stage"
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "target/${{ matrix.target }}/release/deft.exe" "$stage/"
+            cp "target/${{ matrix.target }}/release/revol.exe" "$stage/"
           else
-            cp "target/${{ matrix.target }}/release/deft" "$stage/"
+            cp "target/${{ matrix.target }}/release/revol" "$stage/"
           fi
           cp LICENSE.md README.md "$stage/" 2>/dev/null || true
 
@@ -111,11 +111,11 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: deft-${{ matrix.target }}
+          name: revol-${{ matrix.target }}
           path: |
-            cli/deft-${{ matrix.target }}.tar.gz
-            cli/deft-${{ matrix.target }}.zip
-            cli/deft-${{ matrix.target }}.*.sha256
+            cli/revol-${{ matrix.target }}.tar.gz
+            cli/revol-${{ matrix.target }}.zip
+            cli/revol-${{ matrix.target }}.*.sha256
           if-no-files-found: ignore
 
   release:
@@ -159,7 +159,7 @@ jobs:
             echo "---"
             echo "Install (macOS / Linux / WSL / Git Bash):"
             echo '```sh'
-            echo "curl -fsSL https://deft-cli.com/install.sh | sh"
+            echo "curl -fsSL https://revol-cli.com/install.sh | sh"
             echo '```'
           } >> notes.md
           echo "Release notes:"; cat notes.md
@@ -175,7 +175,7 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag=false || true
           fi
           gh release create "$tag" \
-            --title "deft $tag" \
+            --title "revol $tag" \
             --notes-file notes.md \
             --verify-tag \
             dist/*

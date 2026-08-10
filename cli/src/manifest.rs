@@ -1,4 +1,4 @@
-//! Manifest (`deft.toml`) and lockfile (`deft.lock`) data model.
+//! Manifest (`revol.toml`) and lockfile (`revol.lock`) data model.
 //!
 //! These are plain serde structures. We lean on serde defaults and a couple of
 //! small custom deserializers (for the `version | { version, features }`
@@ -11,13 +11,13 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use crate::error::{DeftError, IoPathExt, Result};
+use crate::error::{RevolError, IoPathExt, Result};
 
 // ---------------------------------------------------------------------------
-// deft.toml
+// revol.toml
 // ---------------------------------------------------------------------------
 
-/// The fully parsed `deft.toml` manifest.
+/// The fully parsed `revol.toml` manifest.
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Manifest {
     /// Optional workspace declaration.
@@ -56,14 +56,14 @@ pub struct Package {
     pub description: Option<String>,
     #[serde(default)]
     pub authors: Vec<String>,
-    /// Optional pinned toolchain, e.g. `"clang-18.1"`. When set, `deft doctor`
-    /// and the pre-build phase of `deft build` invoke the active compiler and
+    /// Optional pinned toolchain, e.g. `"clang-18.1"`. When set, `revol doctor`
+    /// and the pre-build phase of `revol build` invoke the active compiler and
     /// abort the build if its reported version doesn't match.
     #[serde(default)]
     pub toolchain: Option<String>,
     /// Optional cross-compilation target triple, e.g.
     /// `"aarch64-unknown-linux-gnu"`. Passed to clang as `--target=<triple>`
-    /// during both compilation and linking. `deft build --target <triple>`
+    /// during both compilation and linking. `revol build --target <triple>`
     /// overrides this at the CLI (see `effective_target` in `main.rs`).
     /// Unset by default — a native build never sees a `--target` flag.
     #[serde(default)]
@@ -76,7 +76,7 @@ pub struct Package {
     // defines, warnings untouched.
     /// The directory (relative to the package root) that holds the sources to
     /// scan. Defaults to `"src"`, so an existing manifest behaves identically.
-    /// `deft build --from <path>` overrides this at the CLI (see
+    /// `revol build --from <path>` overrides this at the CLI (see
     /// `effective_source_dir` in `main.rs`).
     #[serde(default = "default_source_dir")]
     pub source_dir: String,
@@ -92,7 +92,7 @@ pub struct Package {
     #[serde(default)]
     pub defines: Vec<String>,
     /// Suppress all compiler warnings by injecting `-w`. A blunt escape hatch
-    /// for building noisy legacy code you don't own. `deft build
+    /// for building noisy legacy code you don't own. `revol build
     /// --ignore-warnings` turns this on from the CLI regardless of the
     /// manifest.
     #[serde(default)]
@@ -100,7 +100,7 @@ pub struct Package {
 
     // --- Legacy support (0.7.0) ------------------------------------------
     /// Artifact kind: `"bin"` (executable) or `"lib"` (library). When set,
-    /// deft no longer requires a canonically-named `main.*`/`lib.*` entry
+    /// revol no longer requires a canonically-named `main.*`/`lib.*` entry
     /// file — real libraries whose sources are named `cJSON.c` or `format.cc`
     /// build as-is. Unset (the default) keeps the strict behavior: the entry
     /// file's name decides the kind. Accepts `bin`/`exe`/`executable` and
@@ -229,12 +229,12 @@ impl ToolchainSpec {
     /// so `"clang-18.1"` separates into `"clang"` and `"18.1"`.
     pub fn parse(raw: &str) -> Result<ToolchainSpec> {
         let (compiler, version) = raw.split_once('-').ok_or_else(|| {
-            DeftError::Config(format!(
+            RevolError::Config(format!(
                 "invalid toolchain spec '{raw}' (expected '<compiler>-<version>', e.g. 'clang-18.1')"
             ))
         })?;
         if compiler.is_empty() || version.is_empty() {
-            return Err(DeftError::Config(format!(
+            return Err(RevolError::Config(format!(
                 "invalid toolchain spec '{raw}' (expected '<compiler>-<version>', e.g. 'clang-18.1')"
             )));
         }
@@ -251,12 +251,12 @@ impl ToolchainSpec {
         let output = Command::new(&self.compiler)
             .arg("--version")
             .output()
-            .map_err(|source| DeftError::CommandSpawn {
+            .map_err(|source| RevolError::CommandSpawn {
                 program: self.compiler.clone(),
                 source,
             })?;
         if !output.status.success() {
-            return Err(DeftError::Config(format!(
+            return Err(RevolError::Config(format!(
                 "toolchain check failed: '{} --version' did not exit successfully",
                 self.compiler
             )));
@@ -264,7 +264,7 @@ impl ToolchainSpec {
 
         let text = String::from_utf8_lossy(&output.stdout);
         let detected = extract_compiler_version(&text).ok_or_else(|| {
-            DeftError::Config(format!(
+            RevolError::Config(format!(
                 "could not determine '{}' version from its --version output",
                 self.compiler
             ))
@@ -273,9 +273,9 @@ impl ToolchainSpec {
         let matches =
             detected == self.version || detected.starts_with(&format!("{}.", self.version));
         if !matches {
-            return Err(DeftError::Config(format!(
+            return Err(RevolError::Config(format!(
                 "environment unvalidated: manifest pins toolchain '{}-{}' but found '{} {}' \
-                 (run `deft doctor` for details)",
+                 (run `revol doctor` for details)",
                 self.compiler, self.version, self.compiler, detected
             )));
         }
@@ -368,11 +368,11 @@ impl<'de> Deserialize<'de> for Dependency {
 }
 
 impl Manifest {
-    /// Load and parse a `deft.toml` from a directory root.
+    /// Load and parse a `revol.toml` from a directory root.
     pub fn load(root: &Path) -> Result<Manifest> {
-        let path = root.join("deft.toml");
+        let path = root.join("revol.toml");
         let text = fs::read_to_string(&path).path_ctx(&path)?;
-        let manifest: Manifest = toml::from_str(&text).map_err(|e| DeftError::ManifestParse {
+        let manifest: Manifest = toml::from_str(&text).map_err(|e| RevolError::ManifestParse {
             path: path.clone(),
             message: e.to_string(),
         })?;
@@ -419,10 +419,10 @@ impl Manifest {
 }
 
 // ---------------------------------------------------------------------------
-// deft.lock
+// revol.lock
 // ---------------------------------------------------------------------------
 
-/// The complete `deft.lock` file: a flat list of locked dependencies.
+/// The complete `revol.lock` file: a flat list of locked dependencies.
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Lockfile {
     #[serde(default, rename = "dependency")]
@@ -446,14 +446,14 @@ pub struct LockedDependency {
 }
 
 impl Lockfile {
-    /// Load a `deft.lock` if it exists. Returns `Ok(None)` when absent.
+    /// Load a `revol.lock` if it exists. Returns `Ok(None)` when absent.
     pub fn load(root: &Path) -> Result<Option<Lockfile>> {
-        let path = root.join("deft.lock");
+        let path = root.join("revol.lock");
         if !path.exists() {
             return Ok(None);
         }
         let text = fs::read_to_string(&path).path_ctx(&path)?;
-        let lock: Lockfile = toml::from_str(&text).map_err(|e| DeftError::LockParse {
+        let lock: Lockfile = toml::from_str(&text).map_err(|e| RevolError::LockParse {
             path: path.clone(),
             message: e.to_string(),
         })?;
@@ -462,14 +462,14 @@ impl Lockfile {
 
     /// Serialize and atomically write the lockfile to the project root.
     pub fn save(&self, root: &Path) -> Result<()> {
-        let path = root.join("deft.lock");
+        let path = root.join("revol.lock");
         let mut sorted = self.clone();
         sorted.dependencies.sort_by(|a, b| a.name.cmp(&b.name));
-        let header = "# This file is auto-generated by deft.\n\
+        let header = "# This file is auto-generated by revol.\n\
                       # It records exact resolved versions for reproducible builds.\n\
-                      # Do not edit by hand; run `deft update` to regenerate.\n\n";
+                      # Do not edit by hand; run `revol update` to regenerate.\n\n";
         let body =
-            toml::to_string_pretty(&sorted).map_err(|e| DeftError::Serialize(e.to_string()))?;
+            toml::to_string_pretty(&sorted).map_err(|e| RevolError::Serialize(e.to_string()))?;
         let tmp = path.with_extension("lock.tmp");
         fs::write(&tmp, format!("{header}{body}")).path_ctx(&tmp)?;
         fs::rename(&tmp, &path).path_ctx(&path)?;

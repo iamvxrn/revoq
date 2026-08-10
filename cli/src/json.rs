@@ -1,18 +1,18 @@
 //! Minimal, dependency-free JSON serialization (and, for reading Clang's own
-//! JSON output back, parsing) for deft's own tooling.
+//! JSON output back, parsing) for revol's own tooling.
 //!
-//! deft already declares `serde` for the manifest/lockfile data model, but
+//! revol already declares `serde` for the manifest/lockfile data model, but
 //! pulling in `serde_json` just to emit a handful of flat CI-facing payloads
 //! would needlessly grow the dependency footprint (see
 //! docs/guides/architecture.md). This covers exactly the closed set of
-//! shapes deft needs: objects, arrays, strings, numbers, bools, and null —
-//! enough to both write `deft build --json` / `deft doctor --json` /
+//! shapes revol needs: objects, arrays, strings, numbers, bools, and null —
+//! enough to both write `revol build --json` / `revol doctor --json` /
 //! `compile_commands.json`, and to read back Clang's `-ftime-trace` output
-//! (Chrome Trace Event Format) for `deft build --trace`.
+//! (Chrome Trace Event Format) for `revol build --trace`.
 
 use std::fmt::Write as _;
 
-/// A JSON value restricted to what deft's `--json` payloads need.
+/// A JSON value restricted to what revol's `--json` payloads need.
 #[derive(Debug, Clone)]
 pub enum Json {
     Null,

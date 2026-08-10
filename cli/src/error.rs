@@ -1,7 +1,7 @@
-//! Centralized error handling for deft.
+//! Centralized error handling for revol.
 //!
 //! A single concrete error enum keeps things flat and pragmatic. Every
-//! fallible operation in deft returns `Result<T, DeftError>`. We deliberately
+//! fallible operation in revol returns `Result<T, RevolError>`. We deliberately
 //! avoid a trait-object based error hierarchy; a rich sum type is clearer and
 //! lets call sites `match` on exactly what went wrong.
 
@@ -9,19 +9,19 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-/// The single error type used throughout deft.
+/// The single error type used throughout revol.
 #[derive(Debug)]
-pub enum DeftError {
+pub enum RevolError {
     /// An underlying I/O failure, annotated with the path it concerned.
     Io {
         path: Option<PathBuf>,
         source: io::Error,
     },
 
-    /// The manifest (`deft.toml`) could not be parsed.
+    /// The manifest (`revol.toml`) could not be parsed.
     ManifestParse { path: PathBuf, message: String },
 
-    /// The lockfile (`deft.lock`) could not be parsed.
+    /// The lockfile (`revol.lock`) could not be parsed.
     LockParse { path: PathBuf, message: String },
 
     /// Serialization back to TOML failed.
@@ -30,8 +30,8 @@ pub enum DeftError {
     /// A required file or directory in the strict layout was missing.
     LayoutViolation(String),
 
-    /// The repository does not adhere to the deft standard.
-    NotDeftStandard { path: PathBuf, reason: String },
+    /// The repository does not adhere to the revol standard.
+    NotRevolStandard { path: PathBuf, reason: String },
 
     /// A dependency could not be resolved.
     Resolution(String),
@@ -54,12 +54,12 @@ pub enum DeftError {
         diagnostics: Vec<CompileDiagnostic>,
     },
 
-    /// `deft check` failed: at least one source file couldn't even be parsed
+    /// `revol check` failed: at least one source file couldn't even be parsed
     /// by Clang's analyzer. Diagnostics themselves are already streamed to
     /// the terminal as each unit finishes (`Engine::check_package`), so —
-    /// unlike `Compilation`, whose structured diagnostics also feed `deft
+    /// unlike `Compilation`, whose structured diagnostics also feed `revol
     /// build --json` — this only needs the count. Kept as its own variant
-    /// so the top-line message doesn't claim a "build" happened when `deft
+    /// so the top-line message doesn't claim a "build" happened when `revol
     /// check` never compiles or links anything.
     Analysis { failures: usize },
 
@@ -70,14 +70,14 @@ pub enum DeftError {
     Environment(String),
 }
 
-impl fmt::Display for DeftError {
+impl fmt::Display for RevolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DeftError::Io { path, source } => match path {
+            RevolError::Io { path, source } => match path {
                 Some(p) => write!(f, "I/O error at '{}': {}", p.display(), source),
                 None => write!(f, "I/O error: {}", source),
             },
-            DeftError::ManifestParse { path, message } => {
+            RevolError::ManifestParse { path, message } => {
                 write!(
                     f,
                     "failed to parse manifest '{}': {}",
@@ -85,7 +85,7 @@ impl fmt::Display for DeftError {
                     message
                 )
             }
-            DeftError::LockParse { path, message } => {
+            RevolError::LockParse { path, message } => {
                 write!(
                     f,
                     "failed to parse lockfile '{}': {}",
@@ -93,23 +93,23 @@ impl fmt::Display for DeftError {
                     message
                 )
             }
-            DeftError::Serialize(m) => write!(f, "failed to serialize: {}", m),
-            DeftError::LayoutViolation(m) => write!(f, "project layout violation: {}", m),
-            DeftError::NotDeftStandard { path, reason } => write!(
+            RevolError::Serialize(m) => write!(f, "failed to serialize: {}", m),
+            RevolError::LayoutViolation(m) => write!(f, "project layout violation: {}", m),
+            RevolError::NotRevolStandard { path, reason } => write!(
                 f,
-                "'{}' does not follow the deft standard: {}",
+                "'{}' does not follow the revol standard: {}",
                 path.display(),
                 reason
             ),
-            DeftError::Resolution(m) => write!(f, "dependency resolution failed: {}", m),
-            DeftError::CommandSpawn { program, source } => {
+            RevolError::Resolution(m) => write!(f, "dependency resolution failed: {}", m),
+            RevolError::CommandSpawn { program, source } => {
                 write!(
                     f,
                     "failed to launch '{}': {} (is it installed and on PATH?)",
                     program, source
                 )
             }
-            DeftError::CommandFailed {
+            RevolError::CommandFailed {
                 program,
                 code,
                 stderr,
@@ -125,46 +125,46 @@ impl fmt::Display for DeftError {
                     stderr.trim()
                 )
             }
-            DeftError::Compilation { failures, .. } => {
+            RevolError::Compilation { failures, .. } => {
                 write!(
                     f,
                     "build failed: {} translation unit(s) did not compile",
                     failures
                 )
             }
-            DeftError::Analysis { failures, .. } => {
+            RevolError::Analysis { failures, .. } => {
                 write!(
                     f,
                     "check failed: {} file(s) could not be analyzed",
                     failures
                 )
             }
-            DeftError::Config(m) => write!(f, "invalid configuration: {}", m),
-            DeftError::Environment(m) => write!(f, "environment error: {}", m),
+            RevolError::Config(m) => write!(f, "invalid configuration: {}", m),
+            RevolError::Environment(m) => write!(f, "environment error: {}", m),
         }
     }
 }
 
-impl std::error::Error for DeftError {
+impl std::error::Error for RevolError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            DeftError::Io { source, .. } => Some(source),
-            DeftError::CommandSpawn { source, .. } => Some(source),
+            RevolError::Io { source, .. } => Some(source),
+            RevolError::CommandSpawn { source, .. } => Some(source),
             _ => None,
         }
     }
 }
 
-impl From<io::Error> for DeftError {
+impl From<io::Error> for RevolError {
     fn from(source: io::Error) -> Self {
-        DeftError::Io { path: None, source }
+        RevolError::Io { path: None, source }
     }
 }
 
 /// Convenience alias so signatures stay short.
-pub type Result<T> = std::result::Result<T, DeftError>;
+pub type Result<T> = std::result::Result<T, RevolError>;
 
-/// One structured compiler diagnostic, carried by `DeftError::Compilation` so
+/// One structured compiler diagnostic, carried by `RevolError::Compilation` so
 /// `--json` build output can render exactly what the terminal renderer
 /// (`engine.rs`) shows, without re-parsing clang's stderr a second time.
 #[derive(Debug, Clone)]
@@ -183,7 +183,7 @@ pub trait IoPathExt<T> {
 
 impl<T> IoPathExt<T> for std::result::Result<T, io::Error> {
     fn path_ctx<P: Into<PathBuf>>(self, path: P) -> Result<T> {
-        self.map_err(|source| DeftError::Io {
+        self.map_err(|source| RevolError::Io {
             path: Some(path.into()),
             source,
         })

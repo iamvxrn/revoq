@@ -1,17 +1,17 @@
-# deft installer for native Windows (PowerShell).
+# revol installer for native Windows (PowerShell).
 #
-#   irm https://deft-cli.com/install.ps1 | iex
+#   irm https://revol-cli.com/install.ps1 | iex
 #
 # Downloads the latest release binary, installs it to
-# %LOCALAPPDATA%\deft\bin (override with $env:DEFT_BIN_DIR), adds that to your
-# user PATH, and runs `deft doctor`.
+# %LOCALAPPDATA%\revol\bin (override with $env:REVOL_BIN_DIR), adds that to your
+# user PATH, and runs `revol doctor`.
 #
-#   $env:DEFT_VERSION = "v0.6.0"   # pin a version instead of the latest
+#   $env:REVOL_VERSION = "v0.6.0"   # pin a version instead of the latest
 
 $ErrorActionPreference = "Stop"
-$repo = "xntas/deft"
+$repo = "xntas/revol"
 
-$binDir = if ($env:DEFT_BIN_DIR) { $env:DEFT_BIN_DIR } else { "$env:LOCALAPPDATA\deft\bin" }
+$binDir = if ($env:REVOL_BIN_DIR) { $env:REVOL_BIN_DIR } else { "$env:LOCALAPPDATA\revol\bin" }
 
 # Windows builds are x86_64 for now.
 $arch = $env:PROCESSOR_ARCHITECTURE
@@ -21,19 +21,19 @@ if ($arch -ne "AMD64") {
 $target = "x86_64-pc-windows-msvc"
 
 # Resolve version.
-if ($env:DEFT_VERSION) {
-  $tag = $env:DEFT_VERSION
+if ($env:REVOL_VERSION) {
+  $tag = $env:REVOL_VERSION
 } else {
   Write-Host "  resolving latest release..."
   $tag = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
-  if (-not $tag) { throw "couldn't determine the latest release (set `$env:DEFT_VERSION to pin one)" }
+  if (-not $tag) { throw "couldn't determine the latest release (set `$env:REVOL_VERSION to pin one)" }
 }
 
-$asset = "deft-$target.zip"
+$asset = "revol-$target.zip"
 $url   = "https://github.com/$repo/releases/download/$tag/$asset"
-Write-Host "  installing deft $tag ($target)"
+Write-Host "  installing revol $tag ($target)"
 
-$tmp = Join-Path $env:TEMP ("deft-" + [guid]::NewGuid())
+$tmp = Join-Path $env:TEMP ("revol-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 try {
   $zip = Join-Path $tmp $asset
@@ -41,12 +41,12 @@ try {
   Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
   Expand-Archive -Path $zip -DestinationPath $tmp -Force
 
-  $src = Join-Path $tmp "deft-$target\deft.exe"
-  if (-not (Test-Path $src)) { throw "archive did not contain deft.exe" }
+  $src = Join-Path $tmp "revol-$target\revol.exe"
+  if (-not (Test-Path $src)) { throw "archive did not contain revol.exe" }
 
   New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-  Copy-Item $src (Join-Path $binDir "deft.exe") -Force
-  Write-Host "  installed to $binDir\deft.exe"
+  Copy-Item $src (Join-Path $binDir "revol.exe") -Force
+  Write-Host "  installed to $binDir\revol.exe"
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
@@ -60,6 +60,6 @@ if ($userPath -notlike "*$binDir*") {
 }
 
 Write-Host ""
-Write-Host "  running 'deft doctor' to check your environment..."
+Write-Host "  running 'revol doctor' to check your environment..."
 Write-Host ""
-& "$binDir\deft.exe" doctor
+& "$binDir\revol.exe" doctor

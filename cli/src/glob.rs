@@ -1,7 +1,7 @@
 //! A tiny, dependency-free glob matcher for the source scanner's
 //! `include`/`exclude` patterns (0.7.0 legacy support).
 //!
-//! deft ships without a glob crate — same "write the small thing ourselves"
+//! revol ships without a glob crate — same "write the small thing ourselves"
 //! stance as `json.rs` and `hash.rs`. The supported syntax is the familiar
 //! path-glob subset:
 //!

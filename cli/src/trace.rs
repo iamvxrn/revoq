@@ -1,12 +1,12 @@
-//! Clang `-ftime-trace` orchestration for `deft build --trace`.
+//! Clang `-ftime-trace` orchestration for `revol build --trace`.
 //!
 //! Clang (since version 9) writes `-ftime-trace`'s output next to the object
-//! file, reusing its basename with a `.json` extension — deft relies on that
+//! file, reusing its basename with a `.json` extension — revol relies on that
 //! convention rather than passing `-ftime-trace=<path>` explicitly, since
 //! every object file already has a unique flattened basename
 //! (`object_path()` in engine.rs). Once a package finishes compiling, this
 //! module scans that package's object directory for the per-unit trace
-//! files clang left behind, merges them into one `deft_profile.json` (Chrome
+//! files clang left behind, merges them into one `revol_profile.json` (Chrome
 //! Trace Event Format — loadable directly at chrome://tracing or
 //! speedscope.app), and prints a terminal summary of the slowest individual
 //! headers/templates across the whole package.
@@ -29,7 +29,7 @@ struct Bottleneck {
 }
 
 /// Merge every `*.json` trace file sitting in `obj_dir` into a single
-/// `deft_profile.json` under `profile_dir`, print the top bottlenecks to the
+/// `revol_profile.json` under `profile_dir`, print the top bottlenecks to the
 /// terminal (unless `quiet`), then remove the individual per-unit files.
 ///
 /// Best-effort throughout: a missing, empty, or malformed trace file is
@@ -128,7 +128,7 @@ pub fn aggregate_and_report(obj_dir: &Path, profile_dir: &Path, quiet: bool) {
         "traceEvents".to_string(),
         Json::Array(merged_events),
     )]);
-    let out_path = profile_dir.join("deft_profile.json");
+    let out_path = profile_dir.join("revol_profile.json");
     if fs::write(&out_path, doc.render()).is_err() {
         return;
     }
@@ -175,7 +175,7 @@ mod tests {
 
     fn temp_dir(label: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("deft-trace-test-{label}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("revol-trace-test-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -204,7 +204,7 @@ mod tests {
         assert!(!obj_dir.join("main__cpp.json").exists());
         assert!(!obj_dir.join("util__cpp.json").exists());
 
-        let merged_path = profile_dir.join("deft_profile.json");
+        let merged_path = profile_dir.join("revol_profile.json");
         assert!(merged_path.is_file());
         let merged = std::fs::read_to_string(&merged_path).unwrap();
         let doc = Json::parse(&merged).unwrap();
@@ -218,10 +218,10 @@ mod tests {
 
     #[test]
     fn missing_obj_dir_is_a_silent_no_op() {
-        let missing = std::env::temp_dir().join("deft-trace-test-does-not-exist");
+        let missing = std::env::temp_dir().join("revol-trace-test-does-not-exist");
         let profile_dir = temp_dir("noop-profile");
         aggregate_and_report(&missing, &profile_dir, true);
-        assert!(!profile_dir.join("deft_profile.json").exists());
+        assert!(!profile_dir.join("revol_profile.json").exists());
         let _ = std::fs::remove_dir_all(&profile_dir);
     }
 
@@ -232,7 +232,7 @@ mod tests {
         std::fs::write(obj_dir.join("broken.json"), "{not valid json").unwrap();
 
         aggregate_and_report(&obj_dir, &profile_dir, true);
-        assert!(!profile_dir.join("deft_profile.json").exists());
+        assert!(!profile_dir.join("revol_profile.json").exists());
 
         let _ = std::fs::remove_dir_all(&obj_dir);
         let _ = std::fs::remove_dir_all(&profile_dir);

@@ -2,13 +2,13 @@
 
 **Last Updated: June 2026**
 
-Welcome to Deft. These Terms of Service ("Terms") govern your use of the Deft website and the Deft build system software (the "Software") provided under the pseudonym **xntas** ("Licensor").
+Welcome to Revol. These Terms of Service ("Terms") govern your use of the Revol website and the Revol build system software (the "Software") provided under the pseudonym **xntas** ("Licensor").
 
 ### 1. Acceptance of Terms
 By accessing this website or using the Software, you agree to be bound by these Terms and the terms of the MIT License under which the Software is distributed. If you do not agree, do not use the Software.
 
 ### 2. Software Licensing (MIT License)
-The Deft build system is open-source software. The core source code is distributed strictly under the **MIT License**. You are free to use, copy, modify, merge, publish, or distribute the Software, provided that the original copyright notice and permission notice are included in all copies or substantial portions of the Software.
+The Revol build system is open-source software. The core source code is distributed strictly under the **MIT License**. You are free to use, copy, modify, merge, publish, or distribute the Software, provided that the original copyright notice and permission notice are included in all copies or substantial portions of the Software.
 
 ### 3. Commercial and Enterprise Use
 You are permitted to use the Software in commercial, corporate, and enterprise environments free of charge under the MIT License framework. Future enterprise-grade infrastructure, support SLAs, or managed build-caching services provided by the Licensor may be subject to separate commercial agreements.
