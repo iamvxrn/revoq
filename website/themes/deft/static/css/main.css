@@ -51,16 +51,17 @@
   --subtle:    #888888;
   --body:      #c8c8c8;
   --heading:   #ffffff;
-  --accent:    #ffffff;
-  --on-accent: #000000;
+  --accent:    #4a7bc0;
+  --accent-glow: rgba(74, 123, 192, 0.25);
+  --on-accent: #ffffff;
   --nav-bg:    rgba(0, 0, 0, 0.85);
 
   --radius-sm: 6px;
   --radius:    12px;
   --radius-lg: 18px;
 
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-mono: "JetBrains Mono", "Fira Code", "ui-monospace", "SF Mono", monospace;
+  --font-sans: var(--font-mono);
 
   --max-w:     1100px;
   --nav-h:     60px;
@@ -68,20 +69,7 @@
   --shadow:    0 14px 32px rgba(0, 0, 0, 0.45);
 }
 
-:root[data-theme="light"] {
-  --bg:        #ffffff;
-  --surface:   #f4f4f4;
-  --border:    #e2e2e2;
-  --muted:     #cfcfcf;
-  --subtle:    #666666;
-  --body:      #333333;
-  --heading:   #000000;
-  --accent:    #000000;
-  --on-accent: #ffffff;
-  --nav-bg:    rgba(255, 255, 255, 0.85);
 
-  --shadow:    0 14px 32px rgba(0, 0, 0, 0.10);
-}
 
 /* ── Base ────────────────────────────────────────────────────────── */
 html { scroll-behavior: smooth; }
@@ -106,51 +94,53 @@ img { max-width: 100%; display: block; }
   position: sticky;
   top: 0;
   z-index: 100;
-  height: var(--nav-h);
   background: var(--nav-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 clamp(1.5rem, 5vw, 3rem);
-  view-transition-name: site-nav;
+  height: var(--nav-h);
 }
 
-.nav__inner {
-  width: 100%;
+.nav__container {
   max-width: var(--max-w);
   margin: 0 auto;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 1.5rem;
 }
 
-.nav__logo {
-  font-size: 1.25rem;
+.nav__brand {
+  font-size: 1.15rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   color: var(--heading);
+}
+
+.nav__brand-badge {
+  font-size: 0.7rem;
+  background: rgba(74, 123, 192, 0.12);
+  color: var(--accent);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(74, 123, 192, 0.25);
 }
 
 .nav__links {
   display: flex;
-  gap: 2rem;
+  gap: 1.5rem;
   list-style: none;
+  align-items: center;
 }
 
-.nav__links a {
-  font-size: 0.875rem;
-  color: var(--subtle);
-  font-weight: 500;
-  transition: color 0.15s;
+.nav__link {
+  font-size: 0.85rem;
+  color: var(--body);
 }
 
-.nav__links a:hover,
-.nav__links a.active {
-  color: var(--heading);
-  opacity: 1;
-}
+.nav__link:hover { color: var(--accent); }
 
 .nav__actions {
   display: flex;
@@ -276,8 +266,14 @@ img { max-width: 100%; display: block; }
 .btn:active { transform: translateY(0); box-shadow: none; }
 
 .btn--primary {
-  background: var(--heading);
+  background: var(--accent);
   color: var(--on-accent);
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+.btn--primary:hover {
+  background: #5b8cd1;
+  box-shadow: 0 6px 20px rgba(74, 123, 192, 0.4);
 }
 
 .btn--ghost {
@@ -286,35 +282,124 @@ img { max-width: 100%; display: block; }
   border: 1px solid var(--border);
 }
 
-.btn--ghost:hover { border-color: var(--muted); opacity: 1; }
+.btn--ghost:hover { border-color: var(--accent); color: var(--heading); opacity: 1; }
 
-/* ── Code pill ───────────────────────────────────────────────────── */
-.install-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
+/* ── Unified Terminal Box ────────────────────────────────────────── */
+.terminal-box {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.6rem 1rem 0.6rem 1.25rem;
+  max-width: 580px;
+  margin: 0 auto 1.5rem;
+  text-align: left;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 1px rgba(74, 123, 192, 0.2);
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.terminal-box:hover {
+  border-color: rgba(74, 123, 192, 0.35);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 16px rgba(74, 123, 192, 0.2);
+}
+
+.terminal-header {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.terminal-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.terminal-tab {
+  background: transparent;
+  border: none;
+  color: var(--subtle);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.terminal-tab:hover { color: var(--heading); }
+
+.terminal-tab.is-active {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.terminal-body {
+  padding: 0.85rem 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   font-family: var(--font-mono);
   font-size: 0.85rem;
+}
+
+.terminal-cmd {
   color: var(--body);
-  margin-top: 1.5rem;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
-.install-pill__copy {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--subtle);
-  padding: 2px 6px;
+.terminal-prompt {
+  color: var(--accent);
+  margin-right: 0.5rem;
+  user-select: none;
+}
+
+.copy-btn {
+  background: rgba(74, 123, 192, 0.12);
+  border: 1px solid rgba(74, 123, 192, 0.25);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
-  transition: color 0.15s, background 0.15s;
-  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
 }
 
-.install-pill__copy:hover { color: var(--heading); background: var(--border); }
+.copy-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.hero-footer-link {
+  font-size: 0.85rem;
+  color: var(--subtle);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: color 0.2s;
+}
+
+.hero-footer-link:hover { color: var(--accent); }
 
 /* ── Feature grid ────────────────────────────────────────────────── */
 .features {
