@@ -1,7 +1,7 @@
 #!/bin/sh
 # revoq installer — macOS, Linux, WSL, and Git Bash.
 #
-#   curl -fsSL https://revoq-cli.com/install.sh | sh
+#   curl -fsSL https://revoq.pages.dev/install.sh | sh
 #
 # Downloads the latest release binary for your OS/arch, drops it in
 # ~/.local/bin (override with REVOQ_BIN_DIR), and runs `revoq doctor`.

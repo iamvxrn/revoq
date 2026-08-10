@@ -1,6 +1,6 @@
 # revoq installer for native Windows (PowerShell).
 #
-#   irm https://revoq-cli.com/install.ps1 | iex
+#   irm https://revoq.pages.dev/install.ps1 | iex
 #
 # Downloads the latest release binary, installs it to
 # %LOCALAPPDATA%\revoq\bin (override with $env:REVOQ_BIN_DIR), adds that to your

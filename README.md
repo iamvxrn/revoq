@@ -18,7 +18,7 @@ lown install gh:iamvxrn/revoq
 
 Via **Curl**:
 ```bash
-curl -fsSL https://revoq-cli.com/install.sh | sh
+curl -fsSL https://revoq.pages.dev/install.sh | sh
 ```
 
 ## Features
