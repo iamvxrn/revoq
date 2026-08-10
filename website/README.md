@@ -1,7 +1,7 @@
-# revol Website
+# revoq Website
 
-Static site for revol, built with Hugo. Origin: `https://revol-cli.com/`.
+Static site for revoq, built with Hugo. Origin: `https://revoq-cli.com/`.
 
-> Part of the [revol](https://github.com/xntas/revol) monorepo (`website/`). revol
+> Part of the [revoq](https://github.com/xntas/revoq) monorepo (`website/`). revoq
 > is an experiment in what an AI can build for C/C++ tooling — "Cargo, but for C
 > and C++" — not a production tool.

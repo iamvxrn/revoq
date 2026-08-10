@@ -1,17 +1,17 @@
-# revol installer for native Windows (PowerShell).
+# revoq installer for native Windows (PowerShell).
 #
-#   irm https://revol-cli.com/install.ps1 | iex
+#   irm https://revoq-cli.com/install.ps1 | iex
 #
 # Downloads the latest release binary, installs it to
-# %LOCALAPPDATA%\revol\bin (override with $env:REVOL_BIN_DIR), adds that to your
-# user PATH, and runs `revol doctor`.
+# %LOCALAPPDATA%\revoq\bin (override with $env:REVOQ_BIN_DIR), adds that to your
+# user PATH, and runs `revoq doctor`.
 #
-#   $env:REVOL_VERSION = "v0.6.0"   # pin a version instead of the latest
+#   $env:REVOQ_VERSION = "v0.6.0"   # pin a version instead of the latest
 
 $ErrorActionPreference = "Stop"
-$repo = "xntas/revol"
+$repo = "xntas/revoq"
 
-$binDir = if ($env:REVOL_BIN_DIR) { $env:REVOL_BIN_DIR } else { "$env:LOCALAPPDATA\revol\bin" }
+$binDir = if ($env:REVOQ_BIN_DIR) { $env:REVOQ_BIN_DIR } else { "$env:LOCALAPPDATA\revoq\bin" }
 
 # Windows builds are x86_64 for now.
 $arch = $env:PROCESSOR_ARCHITECTURE
@@ -21,19 +21,19 @@ if ($arch -ne "AMD64") {
 $target = "x86_64-pc-windows-msvc"
 
 # Resolve version.
-if ($env:REVOL_VERSION) {
-  $tag = $env:REVOL_VERSION
+if ($env:REVOQ_VERSION) {
+  $tag = $env:REVOQ_VERSION
 } else {
   Write-Host "  resolving latest release..."
   $tag = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
-  if (-not $tag) { throw "couldn't determine the latest release (set `$env:REVOL_VERSION to pin one)" }
+  if (-not $tag) { throw "couldn't determine the latest release (set `$env:REVOQ_VERSION to pin one)" }
 }
 
-$asset = "revol-$target.zip"
+$asset = "revoq-$target.zip"
 $url   = "https://github.com/$repo/releases/download/$tag/$asset"
-Write-Host "  installing revol $tag ($target)"
+Write-Host "  installing revoq $tag ($target)"
 
-$tmp = Join-Path $env:TEMP ("revol-" + [guid]::NewGuid())
+$tmp = Join-Path $env:TEMP ("revoq-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 try {
   $zip = Join-Path $tmp $asset
@@ -41,12 +41,12 @@ try {
   Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
   Expand-Archive -Path $zip -DestinationPath $tmp -Force
 
-  $src = Join-Path $tmp "revol-$target\revol.exe"
-  if (-not (Test-Path $src)) { throw "archive did not contain revol.exe" }
+  $src = Join-Path $tmp "revoq-$target\revoq.exe"
+  if (-not (Test-Path $src)) { throw "archive did not contain revoq.exe" }
 
   New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-  Copy-Item $src (Join-Path $binDir "revol.exe") -Force
-  Write-Host "  installed to $binDir\revol.exe"
+  Copy-Item $src (Join-Path $binDir "revoq.exe") -Force
+  Write-Host "  installed to $binDir\revoq.exe"
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
@@ -60,6 +60,6 @@ if ($userPath -notlike "*$binDir*") {
 }
 
 Write-Host ""
-Write-Host "  running 'revol doctor' to check your environment..."
+Write-Host "  running 'revoq doctor' to check your environment..."
 Write-Host ""
-& "$binDir\revol.exe" doctor
+& "$binDir\revoq.exe" doctor

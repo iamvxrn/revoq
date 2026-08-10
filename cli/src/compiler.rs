@@ -8,10 +8,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::{RevolError, Result};
+use crate::error::{RevoqError, Result};
 use crate::manifest::{CProfile, CppProfile};
 
-/// The two — and only two — languages revol compiles. They are kept rigidly
+/// The two — and only two — languages revoq compiles. They are kept rigidly
 /// distinct to avoid ABI and standard-mismatch bugs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
@@ -83,7 +83,7 @@ impl OptLevel {
             "g" | "debug" => OptLevel::Odebug,
             "fast" => OptLevel::Ofast,
             other => {
-                return Err(RevolError::Config(format!(
+                return Err(RevoqError::Config(format!(
                     "unknown optimization level '{other}' (expected 0,1,2,3,s,z,g,fast)"
                 )));
             }
@@ -123,7 +123,7 @@ impl Sanitizer {
             "undefined" => Sanitizer::Undefined,
             "leak" => Sanitizer::Leak,
             other => {
-                return Err(RevolError::Config(format!(
+                return Err(RevoqError::Config(format!(
                     "unknown sanitizer '{other}' (expected address, thread, undefined, leak)"
                 )));
             }
@@ -150,14 +150,14 @@ fn parse_sanitizers(raw: &[String]) -> Result<Vec<Sanitizer>> {
 
 /// The pre-build safety matrix: catches sanitizer/LTO combinations that clang
 /// accepts syntactically but that are unsafe or unsupported at runtime, so
-/// revol aborts before spending any time compiling.
+/// revoq aborts before spending any time compiling.
 ///
 /// `label` is the profile name ("C" or "C++") for a precise error message.
 fn validate_sanitizer_matrix(sanitizers: &[Sanitizer], lto: bool, label: &str) -> Result<()> {
     let has = |s: Sanitizer| sanitizers.contains(&s);
 
     if lto && (has(Sanitizer::Address) || has(Sanitizer::Leak)) {
-        return Err(RevolError::Config(format!(
+        return Err(RevoqError::Config(format!(
             "[profile.{}] enables LTO together with the address/leak sanitizer, which are \
              mutually exclusive: link-time optimization can reorder and inline across the \
              instrumentation boundary, producing unreliable ASan/LSan results and \
@@ -168,7 +168,7 @@ fn validate_sanitizer_matrix(sanitizers: &[Sanitizer], lto: bool, label: &str) -
     }
 
     if has(Sanitizer::Thread) && (has(Sanitizer::Address) || has(Sanitizer::Leak)) {
-        return Err(RevolError::Config(format!(
+        return Err(RevoqError::Config(format!(
             "[profile.{}] combines the thread sanitizer with the address/leak sanitizer: \
              their runtime libraries install conflicting interceptors and cannot be linked \
              into the same binary. Pick one sanitizer family at a time.",
@@ -182,7 +182,7 @@ fn validate_sanitizer_matrix(sanitizers: &[Sanitizer], lto: bool, label: &str) -
 /// Map a warning keyword from the manifest to a clang `-W` flag.
 ///
 /// Unknown keywords are passed through as `-W<keyword>` so users can name any
-/// clang warning group without revol needing an exhaustive table.
+/// clang warning group without revoq needing an exhaustive table.
 fn warning_flag(keyword: &str) -> String {
     match keyword.trim() {
         "all" => "-Wall".to_string(),
@@ -215,13 +215,13 @@ pub struct Compiler {
     own_include_dir: PathBuf,
     /// `-I` include directories shared by both languages (dependency headers).
     include_dirs: Vec<PathBuf>,
-    /// `-D` defines injected for active features, e.g. `REVOL_FEATURE_SSL`.
+    /// `-D` defines injected for active features, e.g. `REVOQ_FEATURE_SSL`.
     feature_defines: Vec<String>,
     /// Project-wide `-D` defines from `[package] defines`, applied to *both*
     /// languages on top of each profile's own `defines` (legacy support).
     package_defines: Vec<String>,
     /// When true, inject `-w` to silence every compiler warning (`[package]
-    /// ignore_warnings` or `revol build --ignore-warnings`). A blunt escape
+    /// ignore_warnings` or `revoq build --ignore-warnings`). A blunt escape
     /// hatch for noisy legacy code.
     ignore_warnings: bool,
     /// When true, append `-g` and force a debug-friendly opt floor.
@@ -229,10 +229,10 @@ pub struct Compiler {
     /// Release builds set NDEBUG and trust the profile's optimization level.
     release: bool,
     /// When true, inject `-ftime-trace` so every translation unit emits a
-    /// sibling `.json` profiling file next to its object (`revol build
+    /// sibling `.json` profiling file next to its object (`revoq build
     /// --trace`); see `trace.rs` for how those files get aggregated.
     trace: bool,
-    /// Cross-compilation target triple (`revol build --target` or the
+    /// Cross-compilation target triple (`revoq build --target` or the
     /// `[package] target` manifest field). When set, injected as
     /// `--target=<triple>` into every compile *and* the final link step, so
     /// object files and the linked artifact always agree on target.
@@ -241,7 +241,7 @@ pub struct Compiler {
 
 impl Compiler {
     /// `package_root` is the root of the package being compiled (the
-    /// directory containing its `revol.toml`); its `include/` subdirectory is
+    /// directory containing its `revoq.toml`); its `include/` subdirectory is
     /// unconditionally added to the header search path, independent of
     /// `include_dirs` (which carries *other* packages' public headers, e.g.
     /// dependencies).
@@ -260,7 +260,7 @@ impl Compiler {
     ) -> Compiler {
         let feature_defines = active_features
             .iter()
-            .map(|f| format!("REVOL_FEATURE_{}", f.to_ascii_uppercase().replace('-', "_")))
+            .map(|f| format!("REVOQ_FEATURE_{}", f.to_ascii_uppercase().replace('-', "_")))
             .collect();
         let include_dir = package_root.join("include");
         Compiler {
@@ -328,7 +328,7 @@ impl Compiler {
     /// where the `.o` should be written.
     pub fn compile_unit(&self, source: &Path, object: &Path) -> Result<CompileUnit> {
         let language = Language::from_extension(source).ok_or_else(|| {
-            RevolError::Config(format!(
+            RevoqError::Config(format!(
                 "cannot determine language for '{}' (unsupported extension)",
                 source.display()
             ))
@@ -347,7 +347,7 @@ impl Compiler {
         })
     }
 
-    /// Build the `revol check` static-analysis invocation for a single source
+    /// Build the `revoq check` static-analysis invocation for a single source
     /// file: `--analyze` in place of `-c -o <object>`, so clang parses and
     /// runs its analyzer matrix without emitting an object file. Reuses
     /// `CompileUnit`'s shape purely for its `language`/`source`/`args`
@@ -356,7 +356,7 @@ impl Compiler {
     /// produces one.
     pub fn analyze_unit(&self, source: &Path) -> Result<CompileUnit> {
         let language = Language::from_extension(source).ok_or_else(|| {
-            RevolError::Config(format!(
+            RevoqError::Config(format!(
                 "cannot determine language for '{}' (unsupported extension)",
                 source.display()
             ))
@@ -460,7 +460,7 @@ impl Compiler {
         Ok(args)
     }
 
-    /// Argument vector for `revol check`'s analysis pass over a C translation
+    /// Argument vector for `revoq check`'s analysis pass over a C translation
     /// unit. Deliberately a smaller set than `c_flags`: no optimization
     /// level, no LTO, no sanitizers, no `extra_flags` — none of those affect
     /// what the analyzer parses or reports, and `--analyze` never reaches
@@ -516,7 +516,7 @@ impl Compiler {
     ///
     /// `force_debug_syms` is true when the profile has at least one active
     /// sanitizer: sanitizer stack traces are unreadable raw addresses without
-    /// `-g`, so revol injects it even in a release/optimized profile that
+    /// `-g`, so revoq injects it even in a release/optimized profile that
     /// would otherwise strip symbols — and warns once when it has to override
     /// the profile's own choice.
     fn push_common(
@@ -532,12 +532,12 @@ impl Compiler {
         // `c_flags`/`cpp_flags` before this call), so `-w` overrides them —
         // but still before `extra_flags`, leaving that escape hatch the final
         // word. Deliberately absent from the `--analyze` path: suppressing
-        // warnings there would defeat the point of `revol check`.
+        // warnings there would defeat the point of `revoq check`.
         if self.ignore_warnings {
             args.push("-w".to_string());
         }
 
-        // `revol build --trace`: clang writes this unit's profile next to its
+        // `revoq build --trace`: clang writes this unit's profile next to its
         // `-o` object path (same basename, `.json` extension) — see
         // trace.rs for the aggregation step that follows compilation.
         if self.trace {
@@ -552,7 +552,7 @@ impl Compiler {
         }
     }
 
-    /// The subset of flags shared by a real compile *and* a `revol check`
+    /// The subset of flags shared by a real compile *and* a `revoq check`
     /// analysis pass: colorized machine-parseable diagnostics, the
     /// cross-compilation target (if any), include paths, and defines. Kept
     /// separate from `push_common` because analysis never wants `-g`,
@@ -563,8 +563,8 @@ impl Compiler {
         args.push("-fcolor-diagnostics".to_string());
         args.push("-fno-caret-diagnostics".to_string());
 
-        // `revol build --target` / `[package] target`: cross-compile. Kept in
-        // the shared helper (rather than only `push_common`) so `revol
+        // `revoq build --target` / `[package] target`: cross-compile. Kept in
+        // the shared helper (rather than only `push_common`) so `revoq
         // check --target` analyzes against the same target-specific
         // headers/macros a cross-compiled build would actually see.
         if let Some(target) = &self.target {
@@ -599,7 +599,7 @@ impl Compiler {
     /// one or more *candidates*, most-preferred first: the caller (`Engine`)
     /// is expected to try each in turn and only fall through to the next one
     /// if the program itself can't be spawned — the same "try, then fall
-    /// back" shape used elsewhere in revol (e.g. the resolver's clone retries).
+    /// back" shape used elsewhere in revoq (e.g. the resolver's clone retries).
     pub fn link_command(
         &self,
         objects: &[PathBuf],
@@ -869,7 +869,7 @@ mod tests {
     /// `[package] ignore_warnings` (and `--ignore-warnings`, which sets the
     /// same flag) must inject a single `-w` into a real compile — after the
     /// profile's `-W` groups so it wins — and never into the `--analyze`
-    /// path, where suppressing warnings would defeat `revol check`.
+    /// path, where suppressing warnings would defeat `revoq check`.
     #[test]
     fn ignore_warnings_injects_dash_w_into_compile_but_not_analyze() {
         let plain = compiler();
@@ -1086,7 +1086,7 @@ mod tests {
         assert!(sanitize_pos < object_pos);
     }
 
-    /// `revol build --trace` must inject `-ftime-trace` into every
+    /// `revoq build --trace` must inject `-ftime-trace` into every
     /// compile — and only when explicitly requested, matching the
     /// backwards-compatibility guarantee already covered by
     /// `empty_sanitizers_is_backwards_compatible_with_v0_3_0`.
@@ -1192,7 +1192,7 @@ mod tests {
         }
     }
 
-    /// `revol check` must swap `-c -o <obj>` for `--analyze`, keep the
+    /// `revoq check` must swap `-c -o <obj>` for `--analyze`, keep the
     /// profile's warnings/standard/includes/target, and drop everything
     /// that only matters for real codegen (optimization, LTO, sanitizers,
     /// `-g`/`-DNDEBUG`, `-ftime-trace`, `extra_flags`).

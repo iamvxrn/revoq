@@ -1,7 +1,7 @@
-//! Centralized error handling for revol.
+//! Centralized error handling for revoq.
 //!
 //! A single concrete error enum keeps things flat and pragmatic. Every
-//! fallible operation in revol returns `Result<T, RevolError>`. We deliberately
+//! fallible operation in revoq returns `Result<T, RevoqError>`. We deliberately
 //! avoid a trait-object based error hierarchy; a rich sum type is clearer and
 //! lets call sites `match` on exactly what went wrong.
 
@@ -9,19 +9,19 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-/// The single error type used throughout revol.
+/// The single error type used throughout revoq.
 #[derive(Debug)]
-pub enum RevolError {
+pub enum RevoqError {
     /// An underlying I/O failure, annotated with the path it concerned.
     Io {
         path: Option<PathBuf>,
         source: io::Error,
     },
 
-    /// The manifest (`revol.toml`) could not be parsed.
+    /// The manifest (`revoq.toml`) could not be parsed.
     ManifestParse { path: PathBuf, message: String },
 
-    /// The lockfile (`revol.lock`) could not be parsed.
+    /// The lockfile (`revoq.lock`) could not be parsed.
     LockParse { path: PathBuf, message: String },
 
     /// Serialization back to TOML failed.
@@ -30,8 +30,8 @@ pub enum RevolError {
     /// A required file or directory in the strict layout was missing.
     LayoutViolation(String),
 
-    /// The repository does not adhere to the revol standard.
-    NotRevolStandard { path: PathBuf, reason: String },
+    /// The repository does not adhere to the revoq standard.
+    NotRevoqStandard { path: PathBuf, reason: String },
 
     /// A dependency could not be resolved.
     Resolution(String),
@@ -54,12 +54,12 @@ pub enum RevolError {
         diagnostics: Vec<CompileDiagnostic>,
     },
 
-    /// `revol check` failed: at least one source file couldn't even be parsed
+    /// `revoq check` failed: at least one source file couldn't even be parsed
     /// by Clang's analyzer. Diagnostics themselves are already streamed to
     /// the terminal as each unit finishes (`Engine::check_package`), so —
-    /// unlike `Compilation`, whose structured diagnostics also feed `revol
+    /// unlike `Compilation`, whose structured diagnostics also feed `revoq
     /// build --json` — this only needs the count. Kept as its own variant
-    /// so the top-line message doesn't claim a "build" happened when `revol
+    /// so the top-line message doesn't claim a "build" happened when `revoq
     /// check` never compiles or links anything.
     Analysis { failures: usize },
 
@@ -70,14 +70,14 @@ pub enum RevolError {
     Environment(String),
 }
 
-impl fmt::Display for RevolError {
+impl fmt::Display for RevoqError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RevolError::Io { path, source } => match path {
+            RevoqError::Io { path, source } => match path {
                 Some(p) => write!(f, "I/O error at '{}': {}", p.display(), source),
                 None => write!(f, "I/O error: {}", source),
             },
-            RevolError::ManifestParse { path, message } => {
+            RevoqError::ManifestParse { path, message } => {
                 write!(
                     f,
                     "failed to parse manifest '{}': {}",
@@ -85,7 +85,7 @@ impl fmt::Display for RevolError {
                     message
                 )
             }
-            RevolError::LockParse { path, message } => {
+            RevoqError::LockParse { path, message } => {
                 write!(
                     f,
                     "failed to parse lockfile '{}': {}",
@@ -93,23 +93,23 @@ impl fmt::Display for RevolError {
                     message
                 )
             }
-            RevolError::Serialize(m) => write!(f, "failed to serialize: {}", m),
-            RevolError::LayoutViolation(m) => write!(f, "project layout violation: {}", m),
-            RevolError::NotRevolStandard { path, reason } => write!(
+            RevoqError::Serialize(m) => write!(f, "failed to serialize: {}", m),
+            RevoqError::LayoutViolation(m) => write!(f, "project layout violation: {}", m),
+            RevoqError::NotRevoqStandard { path, reason } => write!(
                 f,
-                "'{}' does not follow the revol standard: {}",
+                "'{}' does not follow the revoq standard: {}",
                 path.display(),
                 reason
             ),
-            RevolError::Resolution(m) => write!(f, "dependency resolution failed: {}", m),
-            RevolError::CommandSpawn { program, source } => {
+            RevoqError::Resolution(m) => write!(f, "dependency resolution failed: {}", m),
+            RevoqError::CommandSpawn { program, source } => {
                 write!(
                     f,
                     "failed to launch '{}': {} (is it installed and on PATH?)",
                     program, source
                 )
             }
-            RevolError::CommandFailed {
+            RevoqError::CommandFailed {
                 program,
                 code,
                 stderr,
@@ -125,46 +125,46 @@ impl fmt::Display for RevolError {
                     stderr.trim()
                 )
             }
-            RevolError::Compilation { failures, .. } => {
+            RevoqError::Compilation { failures, .. } => {
                 write!(
                     f,
                     "build failed: {} translation unit(s) did not compile",
                     failures
                 )
             }
-            RevolError::Analysis { failures, .. } => {
+            RevoqError::Analysis { failures, .. } => {
                 write!(
                     f,
                     "check failed: {} file(s) could not be analyzed",
                     failures
                 )
             }
-            RevolError::Config(m) => write!(f, "invalid configuration: {}", m),
-            RevolError::Environment(m) => write!(f, "environment error: {}", m),
+            RevoqError::Config(m) => write!(f, "invalid configuration: {}", m),
+            RevoqError::Environment(m) => write!(f, "environment error: {}", m),
         }
     }
 }
 
-impl std::error::Error for RevolError {
+impl std::error::Error for RevoqError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            RevolError::Io { source, .. } => Some(source),
-            RevolError::CommandSpawn { source, .. } => Some(source),
+            RevoqError::Io { source, .. } => Some(source),
+            RevoqError::CommandSpawn { source, .. } => Some(source),
             _ => None,
         }
     }
 }
 
-impl From<io::Error> for RevolError {
+impl From<io::Error> for RevoqError {
     fn from(source: io::Error) -> Self {
-        RevolError::Io { path: None, source }
+        RevoqError::Io { path: None, source }
     }
 }
 
 /// Convenience alias so signatures stay short.
-pub type Result<T> = std::result::Result<T, RevolError>;
+pub type Result<T> = std::result::Result<T, RevoqError>;
 
-/// One structured compiler diagnostic, carried by `RevolError::Compilation` so
+/// One structured compiler diagnostic, carried by `RevoqError::Compilation` so
 /// `--json` build output can render exactly what the terminal renderer
 /// (`engine.rs`) shows, without re-parsing clang's stderr a second time.
 #[derive(Debug, Clone)]
@@ -183,7 +183,7 @@ pub trait IoPathExt<T> {
 
 impl<T> IoPathExt<T> for std::result::Result<T, io::Error> {
     fn path_ctx<P: Into<PathBuf>>(self, path: P) -> Result<T> {
-        self.map_err(|source| RevolError::Io {
+        self.map_err(|source| RevoqError::Io {
             path: Some(path.into()),
             source,
         })

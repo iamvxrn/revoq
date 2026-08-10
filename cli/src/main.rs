@@ -1,7 +1,7 @@
-//! revol — entry point.
+//! revoq — entry point.
 //!
 //! `main` is a thin bridge: parse the CLI, dispatch to a handler, and turn a
-//! `RevolError` into a clean, non-panicking process exit. All real logic lives
+//! `RevoqError` into a clean, non-panicking process exit. All real logic lives
 //! in the dedicated modules.
 
 mod cli;
@@ -25,7 +25,7 @@ use std::time::Instant;
 use cli::{BuildArgs, CheckArgs, Cli, Command as Cmd, InitArgs, RunArgs, UpdateArgs, VendorArgs};
 use compiler::Compiler;
 use engine::{default_jobs, require_package, Crate, Engine, Layout, ScanConfig};
-use error::{RevolError, IoPathExt, Result};
+use error::{RevoqError, IoPathExt, Result};
 use json::Json;
 use manifest::{Lockfile, Manifest, Package, ToolchainSpec};
 use resolver::{build_lockfile, package_name, ResolvedDep, Resolver};
@@ -74,7 +74,7 @@ struct BuildOutcome {
     compile_commands: Vec<compdb::CompileCommandEntry>,
 }
 
-/// Top-level `revol build` entry point.
+/// Top-level `revoq build` entry point.
 fn cmd_build_top_level(args: BuildArgs, verbose: bool, quiet: bool, json: bool) -> Result<()> {
     if !json {
         return build_with_diagnostics(args, verbose, quiet, json).map(|_| ());
@@ -112,12 +112,12 @@ fn build_success_payload(outcome: &BuildOutcome, duration_ms: i64) -> Json {
 
 /// `{"status":"failure","duration_ms":N,"cache_hits":0,"errors":[{...}]}` —
 /// `errors` carries the structured `CompileDiagnostic`s from
-/// `RevolError::Compilation` when available, or a single synthetic entry
+/// `RevoqError::Compilation` when available, or a single synthetic entry
 /// built from the error's `Display` text otherwise (e.g. a layout violation
 /// that never reached the compiler at all).
-fn build_failure_payload(err: &RevolError, duration_ms: i64) -> Json {
+fn build_failure_payload(err: &RevoqError, duration_ms: i64) -> Json {
     let errors: Vec<Json> = match err {
-        RevolError::Compilation { diagnostics, .. } => diagnostics
+        RevoqError::Compilation { diagnostics, .. } => diagnostics
             .iter()
             .map(|d| {
                 Json::Object(vec![
@@ -149,8 +149,8 @@ fn build_failure_payload(err: &RevolError, duration_ms: i64) -> Json {
 /// Run the (intentionally bare) build, and only pay for environment
 /// diagnostics if it actually failed. A successful build never spawns a
 /// single extra process beyond what compiling/linking already required —
-/// that's what keeps the hot path at `revol build`'s target of a near-instant
-/// invocation. Shared by `revol build` and `revol run`, since the latter is
+/// that's what keeps the hot path at `revoq build`'s target of a near-instant
+/// invocation. Shared by `revoq build` and `revoq run`, since the latter is
 /// just a build with an extra step.
 fn build_with_diagnostics(
     args: BuildArgs,
@@ -163,7 +163,7 @@ fn build_with_diagnostics(
         Err(err) => {
             if !quiet && !json {
                 eprintln!(
-                    "\n\x1b[1;33mnote\x1b[0m: build failed — running `revol doctor` diagnostics...\n"
+                    "\n\x1b[1;33mnote\x1b[0m: build failed — running `revoq doctor` diagnostics...\n"
                 );
                 let _ = doctor::run(verbose, false);
                 eprintln!();
@@ -173,17 +173,17 @@ fn build_with_diagnostics(
     }
 }
 
-/// `revol sync` — refresh `~/.revol/revol-libs` from the registry.
+/// `revoq sync` — refresh `~/.revoq/revoq-libs` from the registry.
 ///
 /// Strictly an index refresh: no manifest is loaded, no dependency is
-/// resolved, and `revol.lock` is never touched. Use `revol update` to
+/// resolved, and `revoq.lock` is never touched. Use `revoq update` to
 /// re-resolve a project's dependencies instead.
 fn cmd_sync(verbose: bool, quiet: bool) -> Result<()> {
     let resolver = Resolver::new(verbose)?;
     resolver.sync_index(quiet)
 }
 
-/// `revol build`
+/// `revoq build`
 fn cmd_build(args: BuildArgs, verbose: bool, quiet: bool, json: bool) -> Result<BuildOutcome> {
     let root = project_root(args.manifest_path.as_deref())?;
     let manifest = Manifest::load(&root)?;
@@ -201,7 +201,7 @@ fn cmd_build(args: BuildArgs, verbose: bool, quiet: bool, json: bool) -> Result<
         compdb::write(&root, &outcome.compile_commands)?;
         if verbose {
             eprintln!(
-                "  \x1b[2m[revol]\x1b[0m wrote {} entries to compile_commands.json",
+                "  \x1b[2m[revoq]\x1b[0m wrote {} entries to compile_commands.json",
                 outcome.compile_commands.len()
             );
         }
@@ -220,11 +220,11 @@ fn build_single(
     json: bool,
 ) -> Result<BuildOutcome> {
     // `require_package` runs before layout discovery so `[package] source_dir`
-    // (and the CLI `--from` override) can redirect where revol looks for the
+    // (and the CLI `--from` override) can redirect where revoq looks for the
     // entry point — legacy trees whose sources don't live under `src/`.
     let package = require_package(manifest, root)?;
     let scan = scan_config(args.from.as_deref(), &package)?;
-    let layout = Layout::assert_revol_standard(root, &scan)?;
+    let layout = Layout::assert_revoq_standard(root, &scan)?;
 
     // --- Toolchain pin (opt-in; skipped entirely when unset, preserving the
     // hot-path guarantee documented in architecture.md) -------------------
@@ -234,7 +234,7 @@ fn build_single(
 
     // --- Dependency resolution -------------------------------------------
     // A populated third_party/ takes over entirely: no git, no network, no
-    // global resolver cache (see `revol vendor`).
+    // global resolver cache (see `revoq vendor`).
     let resolved = match vendored_dependencies(root, manifest)? {
         Some(vendored) => vendored,
         None => {
@@ -266,7 +266,7 @@ fn build_single(
     let target = effective_target(args.target.as_deref(), manifest);
     if verbose {
         if let Some(t) = &target {
-            eprintln!("  \x1b[2m[revol]\x1b[0m cross-compiling for target: {t}");
+            eprintln!("  \x1b[2m[revoq]\x1b[0m cross-compiling for target: {t}");
         }
     }
 
@@ -279,7 +279,7 @@ fn build_single(
     let features = manifest.resolve_features(&args.features, args.no_default_features);
     if verbose && !features.is_empty() {
         eprintln!(
-            "  \x1b[2m[revol]\x1b[0m active features: {}",
+            "  \x1b[2m[revoq]\x1b[0m active features: {}",
             features.join(", ")
         );
     }
@@ -324,9 +324,9 @@ fn build_single(
 }
 
 /// If `<root>/third_party` exists and is non-empty, resolve dependencies
-/// entirely from local vendored copies plus `revol.lock` metadata, with no
+/// entirely from local vendored copies plus `revoq.lock` metadata, with no
 /// git or network access at all — the offline/autonomous build path enabled
-/// by `revol vendor`.
+/// by `revoq vendor`.
 fn vendored_dependencies(root: &Path, manifest: &Manifest) -> Result<Option<Vec<ResolvedDep>>> {
     let vendor_dir = root.join("third_party");
     let has_entries = std::fs::read_dir(&vendor_dir)
@@ -337,8 +337,8 @@ fn vendored_dependencies(root: &Path, manifest: &Manifest) -> Result<Option<Vec<
     }
 
     let lock = Lockfile::load(root)?.ok_or_else(|| {
-        RevolError::Config(
-            "third_party/ is populated but revol.lock is missing; run `revol vendor` again".into(),
+        RevoqError::Config(
+            "third_party/ is populated but revoq.lock is missing; run `revoq vendor` again".into(),
         )
     })?;
 
@@ -346,14 +346,14 @@ fn vendored_dependencies(root: &Path, manifest: &Manifest) -> Result<Option<Vec<
     for shorthand in manifest.dependencies.keys() {
         let name = package_name(shorthand);
         let locked = lock.get(&name).ok_or_else(|| {
-            RevolError::Config(format!(
-                "vendored dependency '{name}' has no entry in revol.lock"
+            RevoqError::Config(format!(
+                "vendored dependency '{name}' has no entry in revoq.lock"
             ))
         })?;
         let cache_path = vendor_dir.join(&name);
         if !cache_path.is_dir() {
-            return Err(RevolError::Config(format!(
-                "third_party/{name} is missing; run `revol vendor` again"
+            return Err(RevoqError::Config(format!(
+                "third_party/{name} is missing; run `revoq vendor` again"
             )));
         }
         resolved.push(ResolvedDep {
@@ -399,7 +399,7 @@ fn build_workspace(
     }
 
     let mut outcome =
-        last.ok_or_else(|| RevolError::LayoutViolation("workspace has no members to build".into()))?;
+        last.ok_or_else(|| RevoqError::LayoutViolation("workspace has no members to build".into()))?;
     outcome.compile_commands = all_compile_commands;
     Ok(outcome)
 }
@@ -426,13 +426,13 @@ fn build_dependencies(
     let mut compile_commands = Vec::new();
 
     for dep in resolved {
-        // Each dependency must itself be revol-standard. Load its manifest
+        // Each dependency must itself be revoq-standard. Load its manifest
         // first so its own `[package] source_dir` can steer layout discovery
         // (a dependency may itself be a legacy-layout package).
         let dep_manifest = Manifest::load(&dep.cache_path)?;
         let dep_package = require_package(&dep_manifest, &dep.cache_path)?;
         let dep_scan = scan_config(None, &dep_package)?;
-        let dep_layout = Layout::assert_revol_standard(&dep.cache_path, &dep_scan)?;
+        let dep_layout = Layout::assert_revoq_standard(&dep.cache_path, &dep_scan)?;
 
         if !quiet {
             println!(
@@ -487,12 +487,12 @@ fn build_dependencies(
     Ok((includes, cache_hits, compile_commands))
 }
 
-/// `revol run`
+/// `revoq run`
 fn cmd_run(args: RunArgs, verbose: bool, quiet: bool) -> Result<()> {
     let outcome = build_with_diagnostics(args.build, verbose, quiet, false)?;
     if outcome.crate_kind != Crate::Executable {
-        return Err(RevolError::LayoutViolation(
-            "`revol run` requires an executable (src/main.cpp or src/main.c)".into(),
+        return Err(RevoqError::LayoutViolation(
+            "`revoq run` requires an executable (src/main.cpp or src/main.c)".into(),
         ));
     }
 
@@ -506,7 +506,7 @@ fn cmd_run(args: RunArgs, verbose: bool, quiet: bool) -> Result<()> {
     let status = Command::new(&outcome.artifact)
         .args(&args.bin_args)
         .status()
-        .map_err(|source| RevolError::CommandSpawn {
+        .map_err(|source| RevoqError::CommandSpawn {
             program: outcome.artifact.display().to_string(),
             source,
         })?;
@@ -517,20 +517,20 @@ fn cmd_run(args: RunArgs, verbose: bool, quiet: bool) -> Result<()> {
     Ok(())
 }
 
-/// `revol check` — run Clang's static analyzer over the package's own
+/// `revoq check` — run Clang's static analyzer over the package's own
 /// sources, with no object files, no linking, and no artifact produced.
 ///
 /// Dependencies are resolved (respecting `third_party/` vendoring, same as
-/// `revol build`) purely to expose their headers on the include path — they
-/// are never compiled or analyzed themselves, since `revol check` audits the
+/// `revoq build`) purely to expose their headers on the include path — they
+/// are never compiled or analyzed themselves, since `revoq check` audits the
 /// package you're working on, not its already-vetted dependencies.
 fn cmd_check(args: CheckArgs, verbose: bool, quiet: bool) -> Result<()> {
     let root = project_root(args.manifest_path.as_deref())?;
     let manifest = Manifest::load(&root)?;
     let package = require_package(&manifest, &root)?;
-    // `revol check` has no `--from`; it honors the manifest's `source_dir`.
+    // `revoq check` has no `--from`; it honors the manifest's `source_dir`.
     let scan = scan_config(None, &package)?;
-    let layout = Layout::assert_revol_standard(&root, &scan)?;
+    let layout = Layout::assert_revoq_standard(&root, &scan)?;
 
     let resolved = match vendored_dependencies(&root, &manifest)? {
         Some(vendored) => vendored,
@@ -567,10 +567,10 @@ fn cmd_check(args: CheckArgs, verbose: bool, quiet: bool) -> Result<()> {
     engine.check_package(&layout, &compiler)
 }
 
-/// `revol update` — re-resolve from scratch and rewrite the lockfile.
+/// `revoq update` — re-resolve from scratch and rewrite the lockfile.
 ///
 /// Strictly a dependency-graph refresh: it never fetches or rewrites the
-/// package index (`~/.revol/revol-libs`). Use `revol sync` for that.
+/// package index (`~/.revoq/revoq-libs`). Use `revoq sync` for that.
 fn cmd_update(args: UpdateArgs, verbose: bool, quiet: bool) -> Result<()> {
     let root = project_root(args.manifest_path.as_deref())?;
     let manifest = Manifest::load(&root)?;
@@ -606,7 +606,7 @@ fn cmd_update(args: UpdateArgs, verbose: bool, quiet: bool) -> Result<()> {
 
     if !quiet {
         println!(
-            "\x1b[1;32m     Updated\x1b[0m {} dependenc{} in revol.lock",
+            "\x1b[1;32m     Updated\x1b[0m {} dependenc{} in revoq.lock",
             resolved.len(),
             if resolved.len() == 1 { "y" } else { "ies" }
         );
@@ -622,11 +622,11 @@ fn cmd_update(args: UpdateArgs, verbose: bool, quiet: bool) -> Result<()> {
     Ok(())
 }
 
-/// `revol vendor` — copy every dependency in `revol.lock` into a local
+/// `revoq vendor` — copy every dependency in `revoq.lock` into a local
 /// `third_party/` tree for complete offline autonomy.
 ///
 /// Resolution reuses `Resolver::resolve_all` pinned to the existing lock (the
-/// same reproducible path `revol build` takes), so vendoring never silently
+/// same reproducible path `revoq build` takes), so vendoring never silently
 /// re-resolves a dependency to a different commit than what's locked — it
 /// only relocates already-resolved sources from the global cache into the
 /// project itself.
@@ -634,7 +634,7 @@ fn cmd_vendor(args: VendorArgs, verbose: bool, quiet: bool) -> Result<()> {
     let root = project_root(args.manifest_path.as_deref())?;
     let manifest = Manifest::load(&root)?;
     let lock = Lockfile::load(&root)?.ok_or_else(|| {
-        RevolError::Config("no revol.lock found; run `revol build` or `revol update` first".into())
+        RevoqError::Config("no revoq.lock found; run `revoq build` or `revoq update` first".into())
     })?;
 
     let resolver = Resolver::new(verbose)?;
@@ -691,7 +691,7 @@ fn copy_tree_excluding_git(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `revol init` — scaffold a new revol-standard package.
+/// `revoq init` — scaffold a new revoq-standard package.
 fn cmd_init(args: InitArgs, quiet: bool) -> Result<()> {
     let root = &args.path;
     std::fs::create_dir_all(root).path_ctx(root)?;
@@ -720,7 +720,7 @@ fn cmd_init(args: InitArgs, quiet: bool) -> Result<()> {
 
     let entry_path = src.join(entry_file);
     if entry_path.exists() {
-        return Err(RevolError::LayoutViolation(format!(
+        return Err(RevoqError::LayoutViolation(format!(
             "{} already exists; refusing to overwrite",
             entry_path.display()
         )));
@@ -728,7 +728,7 @@ fn cmd_init(args: InitArgs, quiet: bool) -> Result<()> {
     std::fs::write(&entry_path, entry_body).path_ctx(&entry_path)?;
 
     // Write the manifest.
-    let manifest_path = root.join("revol.toml");
+    let manifest_path = root.join("revoq.toml");
     if !manifest_path.exists() {
         let profile = if is_c { C_PROFILE } else { CPP_PROFILE };
         let manifest = format!(
@@ -760,7 +760,7 @@ fn cmd_init(args: InitArgs, quiet: bool) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Resolve the project root from an optional `--manifest-path` (which may point
-/// at a directory or a `revol.toml`) or fall back to the current directory.
+/// at a directory or a `revoq.toml`) or fall back to the current directory.
 fn project_root(explicit: Option<&Path>) -> Result<PathBuf> {
     let path = match explicit {
         Some(p) => p.to_path_buf(),
@@ -771,9 +771,9 @@ fn project_root(explicit: Option<&Path>) -> Result<PathBuf> {
     } else {
         path
     };
-    if !root.join("revol.toml").is_file() {
-        return Err(RevolError::LayoutViolation(format!(
-            "no revol.toml found in {} (run `revol init` to create a package)",
+    if !root.join("revoq.toml").is_file() {
+        return Err(RevoqError::LayoutViolation(format!(
+            "no revoq.toml found in {} (run `revoq init` to create a package)",
             root.display()
         )));
     }
@@ -785,7 +785,7 @@ fn jobs(args: &BuildArgs) -> usize {
     resolve_jobs(args.jobs)
 }
 
-/// Shared by `revol build`/`revol run` (via `jobs`) and `revol check`: an
+/// Shared by `revoq build`/`revoq run` (via `jobs`) and `revoq check`: an
 /// explicit `-j` is floored to a minimum of `1`; an absent one falls back to
 /// `default_jobs()` (`std::thread::available_parallelism()`).
 fn resolve_jobs(explicit: Option<usize>) -> usize {
@@ -803,7 +803,7 @@ fn effective_target(cli_target: Option<&str>, manifest: &Manifest) -> Option<Str
 }
 
 /// Resolve the sources directory to scan (legacy support). Precedence:
-/// `revol build --from <path>` > `[package] source_dir` > `"src"`. The serde
+/// `revoq build --from <path>` > `[package] source_dir` > `"src"`. The serde
 /// default already collapses the last two into `pkg.source_dir`, so this only
 /// has to layer the CLI override on top.
 fn effective_source_dir(cli_from: Option<&Path>, pkg: &Package) -> String {
@@ -849,20 +849,20 @@ fn short_sha(sha: &str) -> &str {
 
 const CPP_MAIN: &str = "#include <iostream>\n\n\
 int main() {\n    \
-std::cout << \"Hello from revol!\" << std::endl;\n    \
+std::cout << \"Hello from revoq!\" << std::endl;\n    \
 return 0;\n}\n";
 
 const C_MAIN: &str = "#include <stdio.h>\n\n\
 int main(void) {\n    \
-printf(\"Hello from revol!\\n\");\n    \
+printf(\"Hello from revoq!\\n\");\n    \
 return 0;\n}\n";
 
 const CPP_LIB: &str = "// Library entry point.\n\n\
-int revol_add(int a, int b) {\n    \
+int revoq_add(int a, int b) {\n    \
 return a + b;\n}\n";
 
 const C_LIB: &str = "/* Library entry point. */\n\n\
-int revol_add(int a, int b) {\n    \
+int revoq_add(int a, int b) {\n    \
 return a + b;\n}\n";
 
 const CPP_PROFILE: &str = "[profile.cpp]\nstandard = \"c++20\"\nrtti = false\n\
@@ -882,7 +882,7 @@ mod tests {
     fn temp_dir(label: &str) -> PathBuf {
         let n = TEST_SEQ.fetch_add(1, Ordering::Relaxed);
         let dir =
-            std::env::temp_dir().join(format!("revol-main-test-{label}-{}-{n}", std::process::id()));
+            std::env::temp_dir().join(format!("revoq-main-test-{label}-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -920,7 +920,7 @@ mod tests {
         let manifest = manifest_with_dependency("gh:user/lib");
 
         let err = vendored_dependencies(&root, &manifest).unwrap_err();
-        assert!(err.to_string().contains("revol.lock"));
+        assert!(err.to_string().contains("revoq.lock"));
     }
 
     #[test]
@@ -1014,7 +1014,7 @@ mod tests {
 
     #[test]
     fn build_failure_payload_surfaces_structured_compile_diagnostics() {
-        let err = RevolError::Compilation {
+        let err = RevoqError::Compilation {
             failures: 1,
             diagnostics: vec![error::CompileDiagnostic {
                 file: PathBuf::from("src/main.c"),
@@ -1033,7 +1033,7 @@ mod tests {
 
     #[test]
     fn build_failure_payload_falls_back_to_display_text_for_non_compilation_errors() {
-        let err = RevolError::Config("bad toolchain spec".to_string());
+        let err = RevoqError::Config("bad toolchain spec".to_string());
         let rendered = build_failure_payload(&err, 7).render();
         assert!(rendered.contains("\"status\":\"failure\""));
         assert!(rendered.contains("bad toolchain spec"));

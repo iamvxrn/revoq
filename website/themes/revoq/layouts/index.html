@@ -1,13 +1,13 @@
 {{ define "main" }}
 
 <section class="hero">
-  <span class="hero__eyebrow">revol {{ .Site.Params.version | default "v0.7.2" }} — build system for C/C++</span>
+  <span class="hero__eyebrow">revoq {{ .Site.Params.version | default "v0.7.2" }} — build system for C/C++</span>
   <h1 class="hero__title">
     Cargo-style build system <br>
     <span class="hero__title-highlight">for C and C++ projects</span>
   </h1>
   <p class="hero__sub">
-    Revol compiles C and C++ projects with deterministic dependency locking, strict entry point conventions, and parallel work queues.
+    Revoq compiles C and C++ projects with deterministic dependency locking, strict entry point conventions, and parallel work queues.
   </p>
 
   <div class="terminal-box">
@@ -25,12 +25,12 @@
     </div>
     <div class="terminal-body">
       <div class="terminal-cmd">
-        <span class="terminal-prompt">$</span><span id="hero-install-cmd">lown install gh:iamvxrn/revol</span>
+        <span class="terminal-prompt">$</span><span id="hero-install-cmd">lown install gh:iamvxrn/revoq</span>
       </div>
       <button
         class="copy-btn"
         id="hero-install-copy"
-        data-copy="lown install gh:iamvxrn/revol"
+        data-copy="lown install gh:iamvxrn/revoq"
         onclick="copyInstallCmd()"
       >
         copy
@@ -44,9 +44,9 @@
 
   <script>
     var installCmds = {
-      lown: "lown install gh:iamvxrn/revol",
-      curl: "curl -fsSL https://revol-cli.com/install.sh | sh",
-      ps: "irm https://revol-cli.com/install.ps1 | iex"
+      lown: "lown install gh:iamvxrn/revoq",
+      curl: "curl -fsSL https://revoq-cli.com/install.sh | sh",
+      ps: "irm https://revoq-cli.com/install.ps1 | iex"
     };
 
     function switchInstallTab(tabKey) {
@@ -86,7 +86,7 @@
     <div class="feature-card">
       <div class="feature-card__number">02</div>
       <div class="feature-card__title">Reproducible Dependency Graph</div>
-      <div class="feature-card__body"><code>revol.lock</code> pins dependencies to exact Git commit SHAs via atomic file swaps. <code>revol build</code> strictly honors locked states.</div>
+      <div class="feature-card__body"><code>revoq.lock</code> pins dependencies to exact Git commit SHAs via atomic file swaps. <code>revoq build</code> strictly honors locked states.</div>
     </div>
 
     <div class="feature-card">

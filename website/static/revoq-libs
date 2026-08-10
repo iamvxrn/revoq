@@ -1,4 +1,4 @@
-# revol shorthand -> repository URL mapping.
+# revoq shorthand -> repository URL mapping.
 # Format: <shorthand>  <whitespace>  <url>
 # Lines beginning with '#' and blank lines are ignored.
 #

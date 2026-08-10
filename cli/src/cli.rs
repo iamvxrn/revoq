@@ -1,19 +1,19 @@
 //! Command-line interface definitions.
 //!
 //! Everything here is pure data: clap derive structs and enums describing the
-//! surface of the `revol` binary. No logic lives here beyond what clap needs to
+//! surface of the `revoq` binary. No logic lives here beyond what clap needs to
 //! parse arguments. The runtime engine consumes these structures in `main.rs`.
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-/// revol — a modern package manager and build system for C and C++.
+/// revoq — a modern package manager and build system for C and C++.
 #[derive(Parser, Debug)]
 #[command(
-    name = "revol",
+    name = "revoq",
     version,
     about = "A modern package manager and build system for C and C++.",
-    long_about = "revol is a build system for C and C++ with strict \
+    long_about = "revoq is a build system for C and C++ with strict \
                   project layout, Clang integration, and reproducible builds.",
     propagate_version = true
 )]
@@ -38,7 +38,7 @@ pub struct Cli {
     pub command: Command,
 }
 
-/// All top-level subcommands revol understands.
+/// All top-level subcommands revoq understands.
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Compile the current package and all of its dependencies.
@@ -47,32 +47,32 @@ pub enum Command {
     /// Build (if needed) and then run the resulting executable.
     Run(RunArgs),
 
-    /// Create a new revol package in the given directory (or current dir).
+    /// Create a new revoq package in the given directory (or current dir).
     Init(InitArgs),
 
-    /// Re-resolve project dependencies and rewrite revol.lock.
+    /// Re-resolve project dependencies and rewrite revoq.lock.
     ///
     /// Touches only the current project's dependency graph: cache checkouts
-    /// under `~/.revol/cache` and `revol.lock`. Never touches the package index
-    /// (`~/.revol/revol-libs`) — see `Sync` for that.
+    /// under `~/.revoq/cache` and `revoq.lock`. Never touches the package index
+    /// (`~/.revoq/revoq-libs`) — see `Sync` for that.
     Update(UpdateArgs),
 
     /// Diagnose the local toolchain and environment (clang, ar, headers, ...).
     Doctor,
 
-    /// Refresh the local package index (~/.revol/revol-libs) from the registry.
+    /// Refresh the local package index (~/.revoq/revoq-libs) from the registry.
     ///
     /// Touches only that one flat-text index file via native OS fetch tools.
-    /// Never resolves dependencies, never touches a project's `revol.lock` —
+    /// Never resolves dependencies, never touches a project's `revoq.lock` —
     /// see `Update` for that.
     Sync,
 
-    /// Generate a starter revol.toml from an existing build system's config.
+    /// Generate a starter revoq.toml from an existing build system's config.
     Migrate(MigrateArgs),
 
-    /// Vendor every dependency in revol.lock into a local third_party/ tree.
+    /// Vendor every dependency in revoq.lock into a local third_party/ tree.
     ///
-    /// Once third_party/ is populated, subsequent `revol build` runs resolve
+    /// Once third_party/ is populated, subsequent `revoq build` runs resolve
     /// dependencies entirely from those local copies — no git, no network,
     /// no global cache lookups.
     Vendor(VendorArgs),
@@ -110,7 +110,7 @@ pub struct BuildArgs {
     pub no_default_features: bool,
 
     /// Profile compilation with Clang's `-ftime-trace` and aggregate the
-    /// result into `target/<profile>/revol_profile.json` (loadable at
+    /// result into `target/<profile>/revoq_profile.json` (loadable at
     /// chrome://tracing or speedscope.app), printing the slowest headers
     /// and template instantiations to the terminal.
     #[arg(long)]
@@ -137,9 +137,9 @@ pub struct BuildArgs {
     pub ignore_warnings: bool,
 }
 
-/// Arguments for `revol check`.
+/// Arguments for `revoq check`.
 ///
-/// Deliberately a smaller surface than `BuildArgs`: `revol check` never
+/// Deliberately a smaller surface than `BuildArgs`: `revoq check` never
 /// produces an artifact, so `--release`/`-o`/`--trace` don't apply.
 #[derive(clap::Args, Debug)]
 pub struct CheckArgs {
@@ -166,7 +166,7 @@ pub struct CheckArgs {
     pub target: Option<String>,
 }
 
-/// Arguments for `revol run`.
+/// Arguments for `revoq run`.
 #[derive(clap::Args, Debug)]
 pub struct RunArgs {
     /// Build configuration flags shared with `build`.
@@ -178,7 +178,7 @@ pub struct RunArgs {
     pub bin_args: Vec<String>,
 }
 
-/// Arguments for `revol init`.
+/// Arguments for `revoq init`.
 #[derive(clap::Args, Debug)]
 pub struct InitArgs {
     /// Directory to initialize. Created if it does not exist.
@@ -202,7 +202,7 @@ pub struct InitArgs {
     pub c: bool,
 }
 
-/// Arguments for `revol update`.
+/// Arguments for `revoq update`.
 #[derive(clap::Args, Debug)]
 pub struct UpdateArgs {
     /// Path to the project root (defaults to the current directory).
@@ -214,7 +214,7 @@ pub struct UpdateArgs {
     pub package: Option<String>,
 }
 
-/// Arguments for `revol vendor`.
+/// Arguments for `revoq vendor`.
 #[derive(clap::Args, Debug)]
 pub struct VendorArgs {
     /// Path to the project root (defaults to the current directory).
@@ -222,7 +222,7 @@ pub struct VendorArgs {
     pub manifest_path: Option<PathBuf>,
 }
 
-/// Arguments for `revol migrate`.
+/// Arguments for `revoq migrate`.
 #[derive(clap::Args, Debug)]
 pub struct MigrateArgs {
     /// The build system to migrate from. Only "cmake" is supported today.
@@ -253,13 +253,13 @@ mod tests {
     /// index vs. one project's lockfile).
     #[test]
     fn sync_and_update_resolve_to_distinct_variants() {
-        let sync = Cli::try_parse_from(["revol", "sync"]).expect("sync should parse");
+        let sync = Cli::try_parse_from(["revoq", "sync"]).expect("sync should parse");
         match sync.command {
             Command::Sync => {}
             other => panic!("expected Command::Sync, got {other:?}"),
         }
 
-        let update = Cli::try_parse_from(["revol", "update"]).expect("update should parse");
+        let update = Cli::try_parse_from(["revoq", "update"]).expect("update should parse");
         match update.command {
             Command::Update(_) => {}
             other => panic!("expected Command::Update, got {other:?}"),
@@ -268,18 +268,18 @@ mod tests {
         // A single invocation only ever resolves one subcommand; trailing
         // tokens that look like another subcommand are rejected as stray
         // arguments rather than silently accepted.
-        assert!(Cli::try_parse_from(["revol", "sync", "update"]).is_err());
+        assert!(Cli::try_parse_from(["revoq", "sync", "update"]).is_err());
     }
 
     #[test]
     fn update_accepts_an_optional_package_argument() {
-        let cli = Cli::try_parse_from(["revol", "update", "mylib"]).unwrap();
+        let cli = Cli::try_parse_from(["revoq", "update", "mylib"]).unwrap();
         match cli.command {
             Command::Update(args) => assert_eq!(args.package, Some("mylib".to_string())),
             other => panic!("expected Command::Update, got {other:?}"),
         }
 
-        let cli = Cli::try_parse_from(["revol", "update"]).unwrap();
+        let cli = Cli::try_parse_from(["revoq", "update"]).unwrap();
         match cli.command {
             Command::Update(args) => assert_eq!(args.package, None),
             other => panic!("expected Command::Update, got {other:?}"),
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn sync_takes_no_positional_arguments() {
-        assert!(Cli::try_parse_from(["revol", "sync", "extra"]).is_err());
+        assert!(Cli::try_parse_from(["revoq", "sync", "extra"]).is_err());
     }
 
     /// `--json` is declared `global = true`, so it must parse both before
@@ -296,25 +296,25 @@ mod tests {
     /// (those two are the only ones that currently *act* on it).
     #[test]
     fn json_flag_is_global_and_defaults_to_false() {
-        let cli = Cli::try_parse_from(["revol", "build"]).unwrap();
+        let cli = Cli::try_parse_from(["revoq", "build"]).unwrap();
         assert!(!cli.json);
 
-        let before = Cli::try_parse_from(["revol", "--json", "build"]).unwrap();
+        let before = Cli::try_parse_from(["revoq", "--json", "build"]).unwrap();
         assert!(before.json);
 
-        let after = Cli::try_parse_from(["revol", "doctor", "--json"]).unwrap();
+        let after = Cli::try_parse_from(["revoq", "doctor", "--json"]).unwrap();
         assert!(after.json);
     }
 
     #[test]
     fn build_target_flag_defaults_to_none_and_parses_when_given() {
-        let cli = Cli::try_parse_from(["revol", "build"]).unwrap();
+        let cli = Cli::try_parse_from(["revoq", "build"]).unwrap();
         match cli.command {
             Command::Build(args) => assert_eq!(args.target, None),
             other => panic!("expected Command::Build, got {other:?}"),
         }
 
-        let cli = Cli::try_parse_from(["revol", "build", "--target", "aarch64-unknown-linux-gnu"])
+        let cli = Cli::try_parse_from(["revoq", "build", "--target", "aarch64-unknown-linux-gnu"])
             .unwrap();
         match cli.command {
             Command::Build(args) => {
@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn build_from_and_ignore_warnings_default_off_and_parse_when_given() {
-        let cli = Cli::try_parse_from(["revol", "build"]).unwrap();
+        let cli = Cli::try_parse_from(["revoq", "build"]).unwrap();
         match cli.command {
             Command::Build(args) => {
                 assert_eq!(args.from, None);
@@ -336,7 +336,7 @@ mod tests {
         }
 
         let cli =
-            Cli::try_parse_from(["revol", "build", "--from", "legacy/src", "--ignore-warnings"])
+            Cli::try_parse_from(["revoq", "build", "--from", "legacy/src", "--ignore-warnings"])
                 .unwrap();
         match cli.command {
             Command::Build(args) => {
@@ -350,12 +350,12 @@ mod tests {
         }
     }
 
-    /// `revol run` flattens `BuildArgs`, so the legacy build flags must be
+    /// `revoq run` flattens `BuildArgs`, so the legacy build flags must be
     /// reachable through it too.
     #[test]
     fn run_inherits_from_and_ignore_warnings_flags() {
         let cli =
-            Cli::try_parse_from(["revol", "run", "--from", "app", "--ignore-warnings"]).unwrap();
+            Cli::try_parse_from(["revoq", "run", "--from", "app", "--ignore-warnings"]).unwrap();
         match cli.command {
             Command::Run(args) => {
                 assert_eq!(
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn check_parses_as_its_own_command_with_build_like_flags() {
-        let cli = Cli::try_parse_from(["revol", "check"]).unwrap();
+        let cli = Cli::try_parse_from(["revoq", "check"]).unwrap();
         match cli.command {
             Command::Check(args) => {
                 assert_eq!(args.target, None);
@@ -380,7 +380,7 @@ mod tests {
         }
 
         let cli = Cli::try_parse_from([
-            "revol",
+            "revoq",
             "check",
             "--target",
             "wasm32-unknown-unknown",
@@ -399,12 +399,12 @@ mod tests {
 
     #[test]
     fn vendor_parses_as_its_own_command_with_no_positional_arguments() {
-        let cli = Cli::try_parse_from(["revol", "vendor"]).unwrap();
+        let cli = Cli::try_parse_from(["revoq", "vendor"]).unwrap();
         match cli.command {
             Command::Vendor(args) => assert!(args.manifest_path.is_none()),
             other => panic!("expected Command::Vendor, got {other:?}"),
         }
-        assert!(Cli::try_parse_from(["revol", "vendor", "extra"]).is_err());
+        assert!(Cli::try_parse_from(["revoq", "vendor", "extra"]).is_err());
     }
 
     /// The two variants also carry distinct, doc-comment-derived help text —

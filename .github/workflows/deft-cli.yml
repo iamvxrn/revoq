@@ -5,11 +5,11 @@ on:
     branches: [main, develop]
     paths:
       - "cli/**"
-      - ".github/workflows/revol-cli.yml"
+      - ".github/workflows/revoq-cli.yml"
   pull_request:
     paths:
       - "cli/**"
-      - ".github/workflows/revol-cli.yml"
+      - ".github/workflows/revoq-cli.yml"
 
 env:
   CARGO_TERM_COLOR: always
@@ -82,11 +82,11 @@ jobs:
         run: cargo test --verbose
 
       # --- Integration sanity pass: run the real binary -------------------
-      - name: revol doctor (sanity check)
+      - name: revoq doctor (sanity check)
         shell: bash
         run: cargo run --quiet -- doctor
 
-      - name: revol sync (sanity check)
+      - name: revoq sync (sanity check)
         shell: bash
         # Hits the live package-index registry over the network; treated as
         # advisory so transient network/registry hiccups don't fail the build.

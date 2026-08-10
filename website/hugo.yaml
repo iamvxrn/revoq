@@ -1,7 +1,7 @@
-baseURL: "https://revol-cli.com/"
+baseURL: "https://revoq-cli.com/"
 locale: "en-us"
-title: "revol"
-theme: "revol"
+title: "revoq"
+theme: "revoq"
 
 markup:
   goldmark:

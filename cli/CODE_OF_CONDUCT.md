@@ -1,6 +1,6 @@
 # Code of Conduct
 
-revol is a small, friendly project, and the short version is: be decent to each
+revoq is a small, friendly project, and the short version is: be decent to each
 other. Bring good faith, assume it in others, and keep it constructive — even
 when you disagree.
 

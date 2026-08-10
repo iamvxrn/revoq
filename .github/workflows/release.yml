@@ -83,12 +83,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          stage="revol-${{ matrix.target }}"
+          stage="revoq-${{ matrix.target }}"
           mkdir "$stage"
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "target/${{ matrix.target }}/release/revol.exe" "$stage/"
+            cp "target/${{ matrix.target }}/release/revoq.exe" "$stage/"
           else
-            cp "target/${{ matrix.target }}/release/revol" "$stage/"
+            cp "target/${{ matrix.target }}/release/revoq" "$stage/"
           fi
           cp LICENSE.md README.md "$stage/" 2>/dev/null || true
 
@@ -111,11 +111,11 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: revol-${{ matrix.target }}
+          name: revoq-${{ matrix.target }}
           path: |
-            cli/revol-${{ matrix.target }}.tar.gz
-            cli/revol-${{ matrix.target }}.zip
-            cli/revol-${{ matrix.target }}.*.sha256
+            cli/revoq-${{ matrix.target }}.tar.gz
+            cli/revoq-${{ matrix.target }}.zip
+            cli/revoq-${{ matrix.target }}.*.sha256
           if-no-files-found: ignore
 
   release:
@@ -159,7 +159,7 @@ jobs:
             echo "---"
             echo "Install (macOS / Linux / WSL / Git Bash):"
             echo '```sh'
-            echo "curl -fsSL https://revol-cli.com/install.sh | sh"
+            echo "curl -fsSL https://revoq-cli.com/install.sh | sh"
             echo '```'
           } >> notes.md
           echo "Release notes:"; cat notes.md
@@ -175,7 +175,7 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag=false || true
           fi
           gh release create "$tag" \
-            --title "revol $tag" \
+            --title "revoq $tag" \
             --notes-file notes.md \
             --verify-tag \
             dist/*

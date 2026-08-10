@@ -1,15 +1,15 @@
 #!/bin/sh
-# revol installer — macOS, Linux, WSL, and Git Bash.
+# revoq installer — macOS, Linux, WSL, and Git Bash.
 #
-#   curl -fsSL https://revol-cli.com/install.sh | sh
+#   curl -fsSL https://revoq-cli.com/install.sh | sh
 #
 # Downloads the latest release binary for your OS/arch, drops it in
-# ~/.local/bin (override with REVOL_BIN_DIR), and runs `revol doctor`.
+# ~/.local/bin (override with REVOQ_BIN_DIR), and runs `revoq doctor`.
 
 set -eu
 
-REPO="iamvxrn/revol"
-BIN_DIR="${LOWN_BIN:-${REVOL_BIN_DIR:-$HOME/.local/bin}}"
+REPO="iamvxrn/revoq"
+BIN_DIR="${LOWN_BIN:-${REVOQ_BIN_DIR:-$HOME/.local/bin}}"
 
 say()  { printf '  %s\n' "$1"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$1" >&2; }
@@ -30,12 +30,12 @@ fi
 os="$(uname -s)"
 arch="$(uname -m)"
 ext="tar.gz"
-binname="revol"
+binname="revoq"
 
 case "$os" in
   Linux)                         plat="unknown-linux-gnu" ;;
   Darwin)                        plat="apple-darwin" ;;
-  MINGW*|MSYS*|CYGWIN*|Windows*) plat="pc-windows-msvc"; ext="zip"; binname="revol.exe" ;;
+  MINGW*|MSYS*|CYGWIN*|Windows*) plat="pc-windows-msvc"; ext="zip"; binname="revoq.exe" ;;
   *) die "unsupported OS '$os' — build from source: https://github.com/$REPO" ;;
 esac
 
@@ -52,22 +52,22 @@ fi
 target="${cpu}-${plat}"
 
 # --- resolve version -------------------------------------------------------
-if [ "${REVOL_VERSION:-}" != "" ]; then
-  tag="$REVOL_VERSION"
+if [ "${REVOQ_VERSION:-}" != "" ]; then
+  tag="$REVOQ_VERSION"
 else
   say "resolving latest release..."
   tag="$(fetch "https://api.github.com/repos/$REPO/releases/latest" \
     | grep '"tag_name"' | head -1 | cut -d'"' -f4)"
-  [ -n "$tag" ] || die "couldn't determine the latest release (set REVOL_VERSION=vX.Y.Z to pin one)"
+  [ -n "$tag" ] || die "couldn't determine the latest release (set REVOQ_VERSION=vX.Y.Z to pin one)"
 fi
 
-asset="revol-${target}.${ext}"
+asset="revoq-${target}.${ext}"
 url="https://github.com/$REPO/releases/download/${tag}/${asset}"
 
-say "installing revol ${tag} (${target})"
+say "installing revoq ${tag} (${target})"
 
 # --- download + extract ----------------------------------------------------
-tmp="$(mktemp -d 2>/dev/null || mktemp -d -t revol)"
+tmp="$(mktemp -d 2>/dev/null || mktemp -d -t revoq)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 say "downloading ${asset}"
@@ -84,7 +84,7 @@ case "$ext" in
     ;;
 esac
 
-src="$tmp/revol-${target}/$binname"
+src="$tmp/revoq-${target}/$binname"
 [ -f "$src" ] || die "archive did not contain the expected binary ($binname)"
 
 # --- install ---------------------------------------------------------------
@@ -103,6 +103,6 @@ esac
 
 # --- verify the toolchain --------------------------------------------------
 printf '\n'
-say "running 'revol doctor' to check your environment..."
+say "running 'revoq doctor' to check your environment..."
 printf '\n'
-"$BIN_DIR/$binname" doctor || warn "revol is installed, but doctor flagged issues above — fix those before building."
+"$BIN_DIR/$binname" doctor || warn "revoq is installed, but doctor flagged issues above — fix those before building."

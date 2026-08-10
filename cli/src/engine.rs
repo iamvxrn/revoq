@@ -17,7 +17,7 @@ use std::time::Instant;
 
 use crate::compdb::CompileCommandEntry;
 use crate::compiler::{CompileUnit, Compiler, Language, LinkCommand};
-use crate::error::{CompileDiagnostic, RevolError, IoPathExt, Result};
+use crate::error::{CompileDiagnostic, RevoqError, IoPathExt, Result};
 use crate::hash;
 use crate::manifest::{Manifest, Package};
 use crate::resolver;
@@ -39,7 +39,7 @@ impl Crate {
         match raw.trim().to_ascii_lowercase().as_str() {
             "bin" | "exe" | "executable" | "binary" => Ok(Crate::Executable),
             "lib" | "library" | "staticlib" | "static" => Ok(Crate::Library),
-            other => Err(RevolError::Config(format!(
+            other => Err(RevoqError::Config(format!(
                 "unknown [package] kind '{other}' (expected 'bin' or 'lib')"
             ))),
         }
@@ -51,9 +51,9 @@ impl Crate {
 #[derive(Debug, Clone, Default)]
 pub struct ScanConfig {
     /// Sources directory relative to the package root (`[package] source_dir`
-    /// or `revol build --from`); the default `"src"` reproduces strict layout.
+    /// or `revoq build --from`); the default `"src"` reproduces strict layout.
     pub source_dir: String,
-    /// Explicit artifact kind (`[package] kind`). When set, revol skips
+    /// Explicit artifact kind (`[package] kind`). When set, revoq skips
     /// canonical-entry discovery entirely, so a directory of arbitrarily-named
     /// sources (`cJSON.c`, `format.cc`) builds without a `main.*`/`lib.*` file.
     pub kind: Option<Crate>,
@@ -80,8 +80,8 @@ impl ScanConfig {
 /// The discovered, validated layout of a single package.
 #[derive(Debug, Clone)]
 pub struct Layout {
-    /// Kept for future diagnostics/migration tooling (e.g. `revol doctor`,
-    /// `revol migrate`) that need the package root, not just `src/`.
+    /// Kept for future diagnostics/migration tooling (e.g. `revoq doctor`,
+    /// `revoq migrate`) that need the package root, not just `src/`.
     #[allow(dead_code)]
     pub root: PathBuf,
     pub src: PathBuf,
@@ -106,16 +106,16 @@ impl Layout {
     /// winning over `lib`, and the canonical `.cpp`/`.c` tried before the
     /// legacy `.cc`/`.cxx`/`.C` extensions.
     ///
-    /// Legacy escape hatches (0.6/0.7): `source_dir` redirects where revol
+    /// Legacy escape hatches (0.6/0.7): `source_dir` redirects where revoq
     /// looks; `include`/`exclude` globs narrow the scan; and `kind` removes
-    /// the canonical-entry requirement entirely — with `kind` set, revol
+    /// the canonical-entry requirement entirely — with `kind` set, revoq
     /// determines the language from the scanned sources and builds them as the
     /// declared artifact, so a real library named `cJSON.c` builds as-is. The
     /// one-language-per-package rule is unchanged throughout.
     pub fn discover(root: &Path, cfg: &ScanConfig) -> Result<Layout> {
         let src = root.join(&cfg.source_dir);
         if !src.is_dir() {
-            return Err(RevolError::LayoutViolation(format!(
+            return Err(RevoqError::LayoutViolation(format!(
                 "missing '{}/' source directory under {}",
                 cfg.source_dir,
                 root.display()
@@ -136,7 +136,7 @@ impl Layout {
                 // No canonical entry: the kind must be declared, and the
                 // language is inferred from whatever sources the scan finds.
                 let kind = cfg.kind.ok_or_else(|| {
-                    RevolError::LayoutViolation(format!(
+                    RevoqError::LayoutViolation(format!(
                         "no entry point found under {sd}/ and no [package] kind declared. \
                          Either add {sd}/main.<ext> or {sd}/lib.<ext>, or set \
                          kind = \"bin\" | \"lib\" in [package] to build a directory of \
@@ -160,15 +160,15 @@ impl Layout {
         })
     }
 
-    /// Verify a directory is a valid revol-standard package (manifest + layout).
-    pub fn assert_revol_standard(root: &Path, cfg: &ScanConfig) -> Result<Layout> {
-        if !root.join("revol.toml").is_file() {
-            return Err(RevolError::NotRevolStandard {
+    /// Verify a directory is a valid revoq-standard package (manifest + layout).
+    pub fn assert_revoq_standard(root: &Path, cfg: &ScanConfig) -> Result<Layout> {
+        if !root.join("revoq.toml").is_file() {
+            return Err(RevoqError::NotRevoqStandard {
                 path: root.to_path_buf(),
-                reason: "missing revol.toml manifest".to_string(),
+                reason: "missing revoq.toml manifest".to_string(),
             });
         }
-        Layout::discover(root, cfg).map_err(|e| RevolError::NotRevolStandard {
+        Layout::discover(root, cfg).map_err(|e| RevoqError::NotRevoqStandard {
             path: root.to_path_buf(),
             reason: e.to_string(),
         })
@@ -177,7 +177,7 @@ impl Layout {
     /// Gather every compilable translation unit under `source_dir`, honoring
     /// the `include`/`exclude` globs and the strict single-language rule: the
     /// package's language dictates which sources are eligible, and finding the
-    /// *other* language is an error. A revol package is single-language.
+    /// *other* language is an error. A revoq package is single-language.
     pub fn collect_sources(&self) -> Result<Vec<PathBuf>> {
         let scanned = scan_sources(&self.src, &self.include, &self.exclude)?;
 
@@ -196,9 +196,9 @@ impl Layout {
                 Language::C => "C++",
                 Language::Cpp => "C",
             };
-            return Err(RevolError::LayoutViolation(format!(
+            return Err(RevoqError::LayoutViolation(format!(
                 "strict C/C++ separation violated: this is a {} package but found \
-                 {} {} source file(s) (e.g. '{}'). A revol package is single-language.",
+                 {} {} source file(s) (e.g. '{}'). A revoq package is single-language.",
                 self.entry_language.label(),
                 foreign.len(),
                 other,
@@ -272,15 +272,15 @@ fn infer_language(src: &Path, include: &[String], exclude: &[String]) -> Result<
         };
     }
     match (c_file, cpp_file) {
-        (Some(_), Some(cpp)) => Err(RevolError::LayoutViolation(format!(
+        (Some(_), Some(cpp)) => Err(RevoqError::LayoutViolation(format!(
             "strict C/C++ separation violated: this package mixes C and C++ sources \
-             (e.g. '{}'). A revol package is single-language — split it, or narrow the \
+             (e.g. '{}'). A revoq package is single-language — split it, or narrow the \
              scan with [package] include/exclude.",
             cpp.display()
         ))),
         (Some(_), None) => Ok(Language::C),
         (None, Some(_)) => Ok(Language::Cpp),
-        (None, None) => Err(RevolError::LayoutViolation(format!(
+        (None, None) => Err(RevoqError::LayoutViolation(format!(
             "no compilable C/C++ sources found under {} (after include/exclude filters)",
             src.display()
         ))),
@@ -353,8 +353,8 @@ pub struct Engine {
     /// caller is rendering a single structured `--json` payload instead.
     json: bool,
     /// When true, aggregate this package's `-ftime-trace` output into
-    /// `revol_profile.json` and print a bottleneck summary after compiling
-    /// (`revol build --trace`). Has no effect if the compiler wasn't also
+    /// `revoq_profile.json` and print a bottleneck summary after compiling
+    /// (`revoq build --trace`). Has no effect if the compiler wasn't also
     /// told to emit `-ftime-trace` (see `Compiler::new`'s `trace` param).
     trace: bool,
 }
@@ -394,7 +394,7 @@ impl Engine {
 
         let sources = layout.collect_sources()?;
         if sources.is_empty() {
-            return Err(RevolError::LayoutViolation(format!(
+            return Err(RevoqError::LayoutViolation(format!(
                 "package '{}' has no source files under src/",
                 package.name
             )));
@@ -434,7 +434,7 @@ impl Engine {
         // --- Global cache short-circuit ---------------------------------
         // Before spinning up the compile thread-pool, see whether a
         // byte-identical build (same sources, same flags, same target) has
-        // already been cached globally under ~/.revol/cache/prebuilt/{hash}.
+        // already been cached globally under ~/.revoq/cache/prebuilt/{hash}.
         let cache_key = if layout.crate_kind == Crate::Library {
             let fingerprint = compiler.cache_fingerprint(layout.entry_language)?;
             Some(hash::package_key(&sources, &fingerprint)?)
@@ -443,7 +443,7 @@ impl Engine {
         };
 
         if let Some(key) = &cache_key {
-            if let Ok(home) = resolver::revol_home() {
+            if let Ok(home) = resolver::revoq_home() {
                 if let Some(cached) = hash::lookup(&home, key, &package.name) {
                     if let Some(parent) = artifact.parent() {
                         fs::create_dir_all(parent).path_ctx(parent)?;
@@ -527,10 +527,10 @@ impl Engine {
         }
 
         // Populate the global cache for next time. Best-effort: a cache
-        // write failure (e.g. an unwritable ~/.revol) must never fail an
+        // write failure (e.g. an unwritable ~/.revoq) must never fail an
         // otherwise-successful build.
         if let Some(key) = &cache_key {
-            if let Ok(home) = resolver::revol_home() {
+            if let Ok(home) = resolver::revoq_home() {
                 let _ = hash::store(&home, key, &package.name, &artifact);
             }
         }
@@ -542,22 +542,22 @@ impl Engine {
         })
     }
 
-    /// `revol check`: run Clang's static analyzer (`--analyze`) over every
+    /// `revoq check`: run Clang's static analyzer (`--analyze`) over every
     /// source file in `layout`, streaming diagnostics to the terminal as
     /// they arrive. Never touches the linker and never produces an object
     /// file or artifact — a pure read of the source tree.
     ///
     /// Unlike `build_package`/`compile_all`, a unit's diagnostics are
     /// printed **regardless of severity or success**: the whole point of
-    /// `revol check` is to surface analyzer findings, not just errors. Only a
+    /// `revoq check` is to surface analyzer findings, not just errors. Only a
     /// unit that clang itself couldn't parse (non-zero exit) counts as a
     /// failure — analyzer findings on an otherwise-clean parse are printed
     /// as warnings and never fail the command, the same way a successful
-    /// `revol build` can still emit compiler warnings without failing.
+    /// `revoq build` can still emit compiler warnings without failing.
     pub fn check_package(&self, layout: &Layout, compiler: &Compiler) -> Result<()> {
         let sources = layout.collect_sources()?;
         if sources.is_empty() {
-            return Err(RevolError::LayoutViolation(format!(
+            return Err(RevoqError::LayoutViolation(format!(
                 "no source files found under {}",
                 layout.src.display()
             )));
@@ -627,7 +627,7 @@ impl Engine {
         }
 
         if failures > 0 {
-            return Err(RevolError::Analysis { failures });
+            return Err(RevoqError::Analysis { failures });
         }
 
         if !self.quiet {
@@ -698,7 +698,7 @@ impl Engine {
         }
 
         if failures > 0 {
-            return Err(RevolError::Compilation {
+            return Err(RevoqError::Compilation {
                 failures,
                 diagnostics: failed_diagnostics,
             });
@@ -707,7 +707,7 @@ impl Engine {
     }
 
     /// Print diagnostics for a finished unit. A no-op in `--json` mode — the
-    /// caller renders diagnostics from the returned `RevolError::Compilation`
+    /// caller renders diagnostics from the returned `RevoqError::Compilation`
     /// (or the success payload) as a single structured object instead.
     fn report_unit(&self, result: &UnitResult, idx: usize, total: usize) {
         if self.json {
@@ -781,13 +781,13 @@ impl Engine {
                                 link.program
                             );
                         }
-                        last_spawn_err = Some(RevolError::CommandSpawn {
+                        last_spawn_err = Some(RevoqError::CommandSpawn {
                             program: link.program.clone(),
                             source,
                         });
                         continue;
                     }
-                    return Err(RevolError::CommandSpawn {
+                    return Err(RevoqError::CommandSpawn {
                         program: link.program.clone(),
                         source,
                     });
@@ -804,7 +804,7 @@ impl Engine {
                 if diags.is_empty() {
                     eprintln!("{}", stderr.trim_end());
                 }
-                return Err(RevolError::CommandFailed {
+                return Err(RevoqError::CommandFailed {
                     program: link.program.clone(),
                     code: output.status.code(),
                     stderr,
@@ -816,12 +816,12 @@ impl Engine {
         // Unreachable in practice — `link_command` never returns an empty
         // candidate list — but keeps the function total rather than panicking.
         Err(last_spawn_err
-            .unwrap_or_else(|| RevolError::Config("no archiver/linker candidates available".into())))
+            .unwrap_or_else(|| RevoqError::Config("no archiver/linker candidates available".into())))
     }
 }
 
 /// Fold one failed unit's diagnostics into the running list carried by
-/// `RevolError::Compilation`. Prefers parsed `Error`-severity diagnostics;
+/// `RevoqError::Compilation`. Prefers parsed `Error`-severity diagnostics;
 /// falls back to a single synthetic entry built from raw stderr (or a
 /// generic message) when clang's output couldn't be parsed at all.
 fn collect_failure_diagnostics(result: &UnitResult, out: &mut Vec<CompileDiagnostic>) {
@@ -1045,7 +1045,7 @@ fn parse_header_line(line: &str) -> Option<Diagnostic> {
     };
 
     // Expect: file:line:col: severity: message
-    // We split carefully because Windows paths could contain ':'. revol targets
+    // We split carefully because Windows paths could contain ':'. revoq targets
     // Linux/BSD first, so a left-to-right scan on the known shape is fine.
     let mut parts = head.splitn(4, ':');
     let file = parts.next()?;
@@ -1146,8 +1146,8 @@ pub fn require_package(manifest: &Manifest, root: &Path) -> Result<Package> {
     manifest
         .package
         .clone()
-        .ok_or_else(|| RevolError::ManifestParse {
-            path: root.join("revol.toml"),
+        .ok_or_else(|| RevoqError::ManifestParse {
+            path: root.join("revoq.toml"),
             message: "missing [package] table (name/version required to build)".to_string(),
         })
 }
@@ -1160,7 +1160,7 @@ mod tests {
     use std::sync::Mutex;
 
     /// Env vars are process-global; serialize the one test below that
-    /// mutates `REVOL_HOME` so it can't race with itself across reruns.
+    /// mutates `REVOQ_HOME` so it can't race with itself across reruns.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn make_library_package(dir: &Path, name: &str) -> (Layout, Package) {
@@ -1168,7 +1168,7 @@ mod tests {
         fs::create_dir_all(&src).unwrap();
         fs::write(
             src.join("lib.c"),
-            "int revol_add(int a, int b) { return a + b; }\n",
+            "int revoq_add(int a, int b) { return a + b; }\n",
         )
         .unwrap();
         let layout = Layout::discover(dir, &ScanConfig::strict("src")).unwrap();
@@ -1196,7 +1196,7 @@ mod tests {
     /// succeed once pointed at the right directory.
     #[test]
     fn discover_honors_custom_source_dir_and_rejects_missing_one() {
-        let tmp = std::env::temp_dir().join(format!("revol-srcdir-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("revoq-srcdir-{}", std::process::id()));
         let legacy = tmp.join("legacy");
         fs::create_dir_all(&legacy).unwrap();
         fs::write(legacy.join("main.c"), "int main(void){return 0;}\n").unwrap();
@@ -1216,7 +1216,7 @@ mod tests {
     /// the canonical `main.cpp`/`main.c`.
     #[test]
     fn discover_accepts_legacy_entry_extensions() {
-        let tmp = std::env::temp_dir().join(format!("revol-entryext-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("revoq-entryext-{}", std::process::id()));
         let src = tmp.join("src");
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("main.C"), "int main(){return 0;}\n").unwrap();
@@ -1234,7 +1234,7 @@ mod tests {
     /// the declared kind, with the language inferred from the sources.
     #[test]
     fn kind_lib_builds_arbitrarily_named_sources_without_a_canonical_entry() {
-        let tmp = std::env::temp_dir().join(format!("revol-kind-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("revoq-kind-{}", std::process::id()));
         let src = tmp.join("src");
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("cJSON.c"), "int cjson_x(void){return 1;}\n").unwrap();
@@ -1262,7 +1262,7 @@ mod tests {
     /// aren't swept into the library; `include` further narrows the scan.
     #[test]
     fn exclude_and_include_globs_narrow_the_scan() {
-        let tmp = std::env::temp_dir().join(format!("revol-glob-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("revoq-glob-{}", std::process::id()));
         let root = tmp.join("proj");
         fs::create_dir_all(root.join("tests")).unwrap();
         fs::create_dir_all(root.join("fuzzing")).unwrap();
@@ -1294,7 +1294,7 @@ mod tests {
     }
 
     /// End-to-end: a fresh library build must populate
-    /// `~/.revol/cache/prebuilt/{hash}`, and an identical second build (even
+    /// `~/.revoq/cache/prebuilt/{hash}`, and an identical second build (even
     /// after the local `target/` is wiped) must be served from that cache
     /// instead of invoking the compiler again.
     #[test]
@@ -1306,14 +1306,14 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
 
         let pid = std::process::id();
-        let project = std::env::temp_dir().join(format!("revol-engine-cache-test-{pid}"));
-        let home = std::env::temp_dir().join(format!("revol-engine-cache-home-{pid}"));
+        let project = std::env::temp_dir().join(format!("revoq-engine-cache-test-{pid}"));
+        let home = std::env::temp_dir().join(format!("revoq-engine-cache-home-{pid}"));
         let _ = fs::remove_dir_all(&project);
         let _ = fs::remove_dir_all(&home);
         fs::create_dir_all(&project).unwrap();
 
-        let prev_home = std::env::var("REVOL_HOME").ok();
-        std::env::set_var("REVOL_HOME", &home);
+        let prev_home = std::env::var("REVOQ_HOME").ok();
+        std::env::set_var("REVOQ_HOME", &home);
 
         let (layout, package) = make_library_package(&project, "cachelib");
         let compiler = Compiler::new(
@@ -1353,8 +1353,8 @@ mod tests {
         assert!(second.path.is_file());
 
         match prev_home {
-            Some(v) => std::env::set_var("REVOL_HOME", v),
-            None => std::env::remove_var("REVOL_HOME"),
+            Some(v) => std::env::set_var("REVOQ_HOME", v),
+            None => std::env::remove_var("REVOQ_HOME"),
         }
         let _ = fs::remove_dir_all(&project);
         let _ = fs::remove_dir_all(&home);

@@ -1,24 +1,24 @@
 <div align=center>
-<h1>revol</h1>
+<h1>revoq</h1>
 
 <h6>Cargo, but for C and C++. Strict project layout, Clang doing the heavy
 lifting, and builds you can actually reproduce.</h6>
 
-[![Revol Version](https://img.shields.io/badge/version-0.7.2-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/xntas/revol/releases/tag/v0.7.2)
+[![Revoq Version](https://img.shields.io/badge/version-0.7.2-e.svg?style=for-the-badge&labelColor=000000&color=ffffff)](https://github.com/xntas/revoq/releases/tag/v0.7.2)
 [![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg?style=for-the-badge&labelColor=000000&color=ffffff)](#)
 
 </div>
 
-> **First things first: revol is an experiment, not a product.** It started from a
+> **First things first: revoq is an experiment, not a product.** It started from a
 > single question — hand an AI the idea "Cargo, but for C and C++," and see how
 > far it gets. The resolver, the Clang integration, these docs: all of it came
 > out of chasing that. It works, and it's genuinely pleasant on small projects,
 > but it hasn't earned your production build yet. Read it as a study of what AI
 > can do in the C/C++ tooling space, and kick the tires.
 
-## Why revol?
+## Why revoq?
 
-C and C++ tooling is a pile of half-answers that don't talk to each other. revol
+C and C++ tooling is a pile of half-answers that don't talk to each other. revoq
 gives you one manifest and a workflow you already know from other languages, and
 it does that without dragging in a heap of its own dependencies. There's no
 bundled HTTP client, no VCS library, no archiver crate — it just calls the
@@ -28,59 +28,59 @@ system already has. If you want the reasoning behind that, it's written up in
 
 What you get:
 
-- **One place for your code.** revol doesn't go hunting for sources. Your entry
+- **One place for your code.** revoq doesn't go hunting for sources. Your entry
   point is `src/main.cpp` or `src/main.c` for an executable, `src/lib.cpp` or
   `src/lib.c` for a library. If it's not there, the build stops and tells you —
   right away, not three steps later.
 - **C and C++ don't mix.** A package speaks one language. The build engine keeps
   them as separate types, and a package that smuggles in the other language is
   rejected rather than quietly compiled with the wrong flags.
-- **Clang settings live in `revol.toml`.** Optimization level, warnings, language
+- **Clang settings live in `revoq.toml`.** Optimization level, warnings, language
   standard, RTTI, exceptions — all in the manifest, none of it in some
   ever-growing flag string you copy between projects.
 - **Sanitizers that just work.** Put `sanitizers = ["address", "undefined"]` in
-  `[profile.c]`/`[profile.cpp]` and revol wires the right `-fsanitize=` flags into
+  `[profile.c]`/`[profile.cpp]` and revoq wires the right `-fsanitize=` flags into
   both compilation and linking, keeps `-g` on so stack traces stay readable, and
   refuses combinations that don't actually work (LTO with ASan/LSan, or TSan with
   ASan/LSan) before it ever calls clang. More in [Sanitizers](#sanitizers).
-- **Builds you can reproduce.** `revol.lock` pins every dependency to an exact git
-  commit and is written atomically. `revol build` always respects the lock;
-  `revol update` is the one command allowed to rewrite it.
+- **Builds you can reproduce.** `revoq.lock` pins every dependency to an exact git
+  commit and is written atomically. `revoq build` always respects the lock;
+  `revoq update` is the one command allowed to rewrite it.
 - **Parallel out of the box.** A work queue built on `std::thread`,
   `Mutex<VecDeque>`, and `mpsc` compiles across all your cores (`-j` to dial it
   in), and diagnostics come back the moment each unit finishes.
-- **Diagnostics that read like alerts.** revol parses clang's stderr and reprints
+- **Diagnostics that read like alerts.** revoq parses clang's stderr and reprints
   it as clean, colorized messages instead of a wall of text.
 - **Static linking on every platform.** Archiving reaches for `ar` on Unix, or
   `llvm-ar` then `lib.exe` on Windows, only moving on when a tool genuinely isn't
   there. Details in [docs/guides/architecture.md](docs/guides/architecture.md).
-- **Your editor stays in sync.** Every successful `revol build` drops a
+- **Your editor stays in sync.** Every successful `revoq build` drops a
   clangd-compatible `compile_commands.json` in the project root. No flag, no
   setup. See [IDE integration](#ide-integration-compile_commandsjson).
-- **Find your slow headers.** `revol build --trace` shows where clang's time
+- **Find your slow headers.** `revoq build --trace` shows where clang's time
   actually goes — which headers and template instantiations are dragging — using
   Clang's `-ftime-trace`. See [Profiling builds](#profiling-builds---trace).
-- **Cross-compiling is one flag.** `revol build --target <triple>` (or `target`
-  in `revol.toml`) passes `--target=<triple>` through every compile and link,
+- **Cross-compiling is one flag.** `revoq build --target <triple>` (or `target`
+  in `revoq.toml`) passes `--target=<triple>` through every compile and link,
   dependencies included. Clang is already a cross-compiler, so there's nothing
   extra to install. See [Cross-compilation](#cross-compilation).
-- **Analyze without building.** `revol check` runs Clang's analyzer over your
+- **Analyze without building.** `revoq check` runs Clang's analyzer over your
   sources — no objects, no linking, no binary — and prints findings through the
-  same renderer `revol build` uses. See [Static analysis](#static-analysis-revol-check).
+  same renderer `revoq build` uses. See [Static analysis](#static-analysis-revoq-check).
 
 ## Installation
 
-revol is early, so for now you build it from source — you get to see exactly what
+revoq is early, so for now you build it from source — you get to see exactly what
 you're running, and there's nothing to trust but the code in front of you.
 
 ```sh
 cargo build --release
-# binary at target/release/revol
+# binary at target/release/revoq
 ```
 
 You'll need `clang`/`clang++` and `git` on your `PATH`, an archiver (`ar` on
 Unix; `llvm-ar` or `lib.exe` on Windows), and a fetch tool (`curl`/`wget` on
-Unix, PowerShell on Windows). Once it's built, run `revol doctor` — it checks the
+Unix, PowerShell on Windows). Once it's built, run `revoq doctor` — it checks the
 whole toolchain end to end, right down to a real probe compile against
 `<stdio.h>`.
 
@@ -88,14 +88,14 @@ whole toolchain end to end, right down to a real probe compile against
 
 | Command       | Description                                                          |
 | ------------- | --------------------------------------------------------------------- |
-| `revol init`   | Scaffold a new package (`--lib`, `--bin`, `--c`, `--name`).            |
-| `revol build`  | Compile the package (and its dependencies, and workspace members).    |
-| `revol run`    | Build, then run the executable (`-- args` forwarded verbatim).         |
-| `revol check`  | Run Clang's static analyzer — no object files, no linking, no artifact. |
-| `revol update` | Re-resolve dependencies and rewrite `revol.lock`.                      |
-| `revol sync`   | Refresh the global package index (`~/.revol/revol-libs`) from the registry. |
-| `revol doctor` | Diagnose the local toolchain (compiler, archiver, git, headers, ...). |
-| `revol migrate`| Generate a starter `revol.toml` from an existing `CMakeLists.txt`.      |
+| `revoq init`   | Scaffold a new package (`--lib`, `--bin`, `--c`, `--name`).            |
+| `revoq build`  | Compile the package (and its dependencies, and workspace members).    |
+| `revoq run`    | Build, then run the executable (`-- args` forwarded verbatim).         |
+| `revoq check`  | Run Clang's static analyzer — no object files, no linking, no artifact. |
+| `revoq update` | Re-resolve dependencies and rewrite `revoq.lock`.                      |
+| `revoq sync`   | Refresh the global package index (`~/.revoq/revoq-libs`) from the registry. |
+| `revoq doctor` | Diagnose the local toolchain (compiler, archiver, git, headers, ...). |
+| `revoq migrate`| Generate a starter `revoq.toml` from an existing `CMakeLists.txt`.      |
 
 Flags you'll reach for: `--release`, `-o <name>`, `-j <N>`, `--features a,b`,
 `--no-default-features`, `--trace`, `--target <triple>`, `-v`, `-q`.
@@ -107,8 +107,8 @@ clamped, how `[-- ARGS...]` forwarding works? That's all in
 ## Quick start
 
 ```sh
-revol init hello && cd hello
-revol run
+revoq init hello && cd hello
+revoq run
 ```
 
 ## Sanitizers
@@ -134,7 +134,7 @@ extra_flags = ["-fno-omit-frame-pointer"]
 Leave `sanitizers` out (or set it to `[]`) and nothing changes — same behavior
 as a v0.3.0 manifest, no instrumentation.
 
-revol checks a few things before it ever calls clang, so you fail fast instead of
+revoq checks a few things before it ever calls clang, so you fail fast instead of
 mid-build:
 
 - `lto = true` alongside `"address"` or `"leak"` is rejected. LTO and ASan/LSan
@@ -156,17 +156,17 @@ there. Full mechanics in
 
 ## IDE integration (`compile_commands.json`)
 
-Every successful `revol build` writes a
+Every successful `revoq build` writes a
 [JSON compilation database](https://clang.llvm.org/docs/JSONCompilationDatabase.html)
 to `compile_commands.json` in your project root, automatically, no flag needed.
 `clangd` — the language server behind VS Code's C/C++ extension, Neovim, CLion,
-and most other C/C++ editor tooling — reads that file to learn exactly how revol
+and most other C/C++ editor tooling — reads that file to learn exactly how revoq
 compiles each file. So your autocomplete, go-to-definition, and inline
 diagnostics all match your real build: the same `-std`, warnings, defines, and
-`-I` paths revol handed to clang, not an editor's best guess.
+`-I` paths revoq handed to clang, not an editor's best guess.
 
 ```sh
-revol build          # writes ./compile_commands.json alongside revol.toml
+revoq build          # writes ./compile_commands.json alongside revoq.toml
 ```
 
 There's nothing else to set up — point your editor's clangd at the project root
@@ -177,7 +177,7 @@ Because a library's compile flags are fully determined ahead of time, entries ge
 written even for packages served straight from the build cache — full editor
 coverage without forcing a recompile.
 
-Don't want it tracked in git? Add it to `.gitignore`. `revol init` won't do that
+Don't want it tracked in git? Add it to `.gitignore`. `revoq init` won't do that
 for you, since some teams deliberately commit it to keep editor setup identical
 across the whole team.
 
@@ -185,14 +185,14 @@ across the whole team.
 
 Clang can tell you exactly where compile time goes — parsing headers, expanding
 macros, instantiating templates — through `-ftime-trace`. Pass `--trace` and
-revol turns it on and does the reading for you:
+revoq turns it on and does the reading for you:
 
 ```sh
-revol build --trace
+revoq build --trace
 ```
 
-revol injects `-ftime-trace` into every translation unit, merges each unit's trace
-into one profile at `target/<debug|release>/revol_profile.json`, and prints the
+revoq injects `-ftime-trace` into every translation unit, merges each unit's trace
+into one profile at `target/<debug|release>/revoq_profile.json`, and prints the
 worst offenders straight to your terminal:
 
 ```
@@ -201,11 +201,11 @@ worst offenders straight to your terminal:
           842.10ms  Source               /usr/include/c++/14/vector  (in main.cpp)
           301.55ms  InstantiateFunction  std::vector<Widget>::push_back  (in main.cpp)
           ...
-    Finished profile written to target/debug/revol_profile.json
+    Finished profile written to target/debug/revoq_profile.json
                load it at chrome://tracing or https://www.speedscope.app
 ```
 
-`revol_profile.json` is plain [Chrome Trace Event
+`revoq_profile.json` is plain [Chrome Trace Event
 Format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU),
 so drop it into `chrome://tracing` or
 [speedscope.app](https://www.speedscope.app) for an interactive flame graph, each
@@ -216,10 +216,10 @@ building; dependencies compile normally and stay out of the picture.
 
 Clang is already a cross-compiler — the same `clang`/`clang++` you have can build
 for another architecture or OS with nothing more than a `--target=<triple>` flag.
-revol just hands that to you: no second toolchain to download, no target-specific
+revoq just hands that to you: no second toolchain to download, no target-specific
 `clang` symlinks to babysit.
 
-Set it in `revol.toml`:
+Set it in `revoq.toml`:
 
 ```toml
 [package]
@@ -231,29 +231,29 @@ target = "aarch64-unknown-linux-gnu"   # optional; omit for a native build
 or override it for a single run:
 
 ```sh
-revol build --target aarch64-apple-darwin
-revol build --target wasm32-unknown-unknown
+revoq build --target aarch64-apple-darwin
+revoq build --target wasm32-unknown-unknown
 ```
 
 The command-line `--target` always beats the manifest's `target`; leave both off
 and you get a native build with no `--target` reaching clang at all. Whichever
 triple wins goes into every compile step, the final link, and — this part
 matters — every *dependency's* compile too, since you can't link objects built
-for two different targets into one artifact. `revol check --target <triple>` (below)
+for two different targets into one artifact. `revoq check --target <triple>` (below)
 analyzes against the same target-specific headers and predefined macros a real
 cross build would see.
 
-revol doesn't second-guess the triple. An unrecognized one just surfaces as
+revoq doesn't second-guess the triple. An unrecognized one just surfaces as
 clang's own error the moment it runs, the same way a bad `extra_flags` entry
 would. The full resolution and priority rules are in
 [docs/guides/manifest.md](docs/guides/manifest.md#target--cross-compilation).
 
 ## Legacy Support
 
-revol is opinionated on purpose: sources in `src/`, an entry point named
+revoq is opinionated on purpose: sources in `src/`, an entry point named
 `main`/`lib`, one language per package. That's great when you're starting fresh
 and painful when someone hands you a twenty-year-old tree on a Friday afternoon.
-The `[package]` fields below are the escape hatches — they let you aim revol at
+The `[package]` fields below are the escape hatches — they let you aim revoq at
 code you didn't write without moving a single file. Leave them out and nothing
 changes; every default is the strict 0.5.0 behavior.
 
@@ -276,7 +276,7 @@ defines = ["HAVE_CONFIG_H", "MAX_CONN=64"]
 # Building someone else's noisy code? Silence every warning with -w.
 ignore_warnings = true
 
-# Sources aren't named main.*/lib.*? Say what to build and revol stops
+# Sources aren't named main.*/lib.*? Say what to build and revoq stops
 # needing a canonical entry file (0.7).
 kind = "lib"
 
@@ -286,12 +286,12 @@ exclude = ["tests/**", "fuzzing/**"]
 
 A few things worth knowing:
 
-- **`source_dir`** defaults to `"src"`. `revol build --from <path>` overrides it
+- **`source_dir`** defaults to `"src"`. `revoq build --from <path>` overrides it
   from the command line without touching the manifest — handy for a one-off build
   of a tree whose layout you'd rather not commit to.
 - **`kind` frees you from the `main`/`lib` entry name.** A real library's files
   are called `cJSON.c` or `format.cc`, never `lib.c`. Set `kind = "lib"` (or
-  `"bin"`) and revol builds the directory as that artifact, working out the
+  `"bin"`) and revoq builds the directory as that artifact, working out the
   language from the sources — no entry file, no renaming. Leave `kind` off and
   the strict entry-file discovery is exactly as it was.
 - **`include` / `exclude` glob the scan.** Point `source_dir` at a whole repo
@@ -320,13 +320,13 @@ source_dir = "."
 exclude    = ["tests/**", "fuzzing/**"]
 ```
 
-## Static analysis (`revol check`)
+## Static analysis (`revoq check`)
 
-`revol check` runs Clang's static analyzer over your package's own sources —
+`revoq check` runs Clang's static analyzer over your package's own sources —
 parsing and analysis only, no objects, no linker, no binary:
 
 ```sh
-revol check
+revoq check
 ```
 
 ```
@@ -337,27 +337,27 @@ warning[deadcode.DeadStores]: Value stored to 'x' is never read
     Finished static analysis: 3 files checked
 ```
 
-Findings stream through the same colorized renderer `revol build` uses, printed as
+Findings stream through the same colorized renderer `revoq build` uses, printed as
 each file finishes rather than dumped at the end. A file the analyzer can't even
 parse — a real syntax error, a missing header — fails the command; analyzer
-findings on an otherwise-clean parse print as warnings and don't. `revol check`
+findings on an otherwise-clean parse print as warnings and don't. `revoq check`
 takes the same `--features`, `--no-default-features`, `--target`, `-j`, and
-`--manifest-path` flags as `revol build`, minus everything that only matters for
+`--manifest-path` flags as `revoq build`, minus everything that only matters for
 producing a binary (`--release`, `-o`, `--trace`). Dependencies are resolved just
 far enough to put their headers on the include path — never compiled or analyzed
-themselves, since `revol check` is about the package you're working on.
+themselves, since `revoq check` is about the package you're working on.
 
-## The revol home
+## The revoq home
 
-revol keeps its global state under `~/.revol` (override it with `$REVOL_HOME`):
+revoq keeps its global state under `~/.revoq` (override it with `$REVOQ_HOME`):
 
-- `~/.revol/revol-libs` — the shorthand → URL map, one entry per line, refreshed by
-  `revol sync`:
+- `~/.revoq/revoq-libs` — the shorthand → URL map, one entry per line, refreshed by
+  `revoq sync`:
   ```
   gh:user/http_parser   https://github.com/user/http_parser.git
   ```
   `gh:user/lib` shorthands also resolve to GitHub on their own, no entry needed.
-- `~/.revol/cache/` — the global clone cache, keyed by `<name>-<tag>` and reused
+- `~/.revoq/cache/` — the global clone cache, keyed by `<name>-<tag>` and reused
   across projects and updates.
 
 ## License

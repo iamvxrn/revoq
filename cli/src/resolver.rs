@@ -2,21 +2,21 @@
 //!
 //! Responsibilities:
 //!   * Translate `gh:user/lib` shorthands into real repository URLs using the
-//!     local mapping database `~/.revol/revol-libs`.
-//!   * Clone (or reuse) dependencies in the global cache `~/.revol/cache/` at a
+//!     local mapping database `~/.revoq/revoq-libs`.
+//!   * Clone (or reuse) dependencies in the global cache `~/.revoq/cache/` at a
 //!     specific tag, via the system `git` binary (with `curl` as a probe/
 //!     fallback for reachability checks).
-//!   * Pin the exact commit SHA and produce/consume `revol.lock`.
+//!   * Pin the exact commit SHA and produce/consume `revoq.lock`.
 //!
 //! The resolver shells out to real `git`/`curl` rather than embedding a VCS
-//! library — this keeps the binary small and matches revol's design.
+//! library — this keeps the binary small and matches revoq's design.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::error::{RevolError, IoPathExt, Result};
+use crate::error::{RevoqError, IoPathExt, Result};
 use crate::manifest::{Dependency, LockedDependency, Lockfile, Manifest};
 
 /// A single resolved dependency, ready to be built and recorded.
@@ -25,11 +25,11 @@ pub struct ResolvedDep {
     /// Bare package name (last segment of the shorthand path).
     pub name: String,
     /// Original shorthand key, e.g. `gh:user/http_parser`. Retained for
-    /// future tooling (e.g. richer `revol update` diagnostics) that needs to
+    /// future tooling (e.g. richer `revoq update` diagnostics) that needs to
     /// echo back exactly what the manifest declared.
     #[allow(dead_code)]
     pub shorthand: String,
-    /// Concrete repository URL. Retained for future tooling (e.g. `revol
+    /// Concrete repository URL. Retained for future tooling (e.g. `revoq
     /// doctor` connectivity checks) that needs the resolved origin.
     #[allow(dead_code)]
     pub url: String,
@@ -45,21 +45,21 @@ pub struct ResolvedDep {
     pub dependencies: Vec<String>,
 }
 
-/// Owns the revol home directories and the shorthand mapping table.
+/// Owns the revoq home directories and the shorthand mapping table.
 pub struct Resolver {
-    /// `~/.revol`
+    /// `~/.revoq`
     home: PathBuf,
-    /// `~/.revol/cache`
+    /// `~/.revoq/cache`
     cache: PathBuf,
-    /// Parsed contents of `~/.revol/revol-libs`: shorthand -> url.
+    /// Parsed contents of `~/.revoq/revoq-libs`: shorthand -> url.
     mappings: BTreeMap<String, String>,
     verbose: bool,
 }
 
 impl Resolver {
-    /// Build a resolver, discovering and (if needed) creating the revol home.
+    /// Build a resolver, discovering and (if needed) creating the revoq home.
     pub fn new(verbose: bool) -> Result<Resolver> {
-        let home = revol_home()?;
+        let home = revoq_home()?;
         let cache = home.join("cache");
         fs::create_dir_all(&cache).path_ctx(&cache)?;
         let mappings = load_mappings(&home)?;
@@ -71,8 +71,8 @@ impl Resolver {
         })
     }
 
-    /// Path to the revol home directory (`~/.revol`). Retained for future
-    /// tooling (e.g. `revol doctor`) that needs to report where revol's state
+    /// Path to the revoq home directory (`~/.revoq`). Retained for future
+    /// tooling (e.g. `revoq doctor`) that needs to report where revoq's state
     /// lives without reaching into private fields.
     #[allow(dead_code)]
     pub fn home(&self) -> &Path {
@@ -82,8 +82,8 @@ impl Resolver {
     /// Resolve all dependencies of a manifest.
     ///
     /// If `lock` is `Some`, resolution is pinned to the recorded SHAs (the
-    /// reproducible path used by `revol build`). If `None`, fresh resolution is
-    /// performed and new SHAs are fetched (the `revol update` path).
+    /// reproducible path used by `revoq build`). If `None`, fresh resolution is
+    /// performed and new SHAs are fetched (the `revoq update` path).
     pub fn resolve_all(
         &self,
         manifest: &Manifest,
@@ -145,7 +145,7 @@ impl Resolver {
     /// Translate a `gh:user/lib` shorthand into a concrete URL.
     ///
     /// Resolution order:
-    ///   1. Exact match in the `revol-libs` mapping file.
+    ///   1. Exact match in the `revoq-libs` mapping file.
     ///   2. Built-in heuristic for the `gh:` prefix -> github.com.
     fn map_shorthand(&self, shorthand: &str) -> Result<String> {
         if let Some(url) = self.mappings.get(shorthand) {
@@ -156,9 +156,9 @@ impl Resolver {
                 return Ok(format!("https://github.com/{rest}.git"));
             }
         }
-        Err(RevolError::Resolution(format!(
+        Err(RevoqError::Resolution(format!(
             "no mapping for '{shorthand}' in {} and it is not a recognized shorthand",
-            self.home.join("revol-libs").display()
+            self.home.join("revoq-libs").display()
         )))
     }
 
@@ -167,7 +167,7 @@ impl Resolver {
     ///
     /// `version` is what the manifest wrote (e.g. `"3.12.0"`); the real tag may
     /// be `v`-prefixed (`v3.12.0`) or not, so we try both spellings
-    /// (`tag_candidates`). If none of them exist, that is a hard error — revol
+    /// (`tag_candidates`). If none of them exist, that is a hard error — revoq
     /// never silently falls back to the default branch ("latest"), because a
     /// build pinned to a version it can't actually find should fail loudly, not
     /// quietly compile whatever HEAD happens to be.
@@ -196,7 +196,7 @@ impl Resolver {
                     return Ok(());
                 }
             }
-            return Err(RevolError::Resolution(format!(
+            return Err(RevoqError::Resolution(format!(
                 "cached checkout of {url} has none of the tags {candidates:?} \
                  (requested version '{version}')"
             )));
@@ -247,7 +247,7 @@ impl Resolver {
                 return Ok(());
             }
         }
-        Err(RevolError::Resolution(format!(
+        Err(RevoqError::Resolution(format!(
             "none of the tags {candidates:?} exist in {url} \
              (requested version '{version}') — check the version in your manifest"
         )))
@@ -291,13 +291,13 @@ impl Resolver {
         Ok(output.trim().to_string())
     }
 
-    /// Inspect a cached dependency's own `revol.toml` for its direct deps.
+    /// Inspect a cached dependency's own `revoq.toml` for its direct deps.
     fn direct_dependency_names(&self, repo: &Path) -> Result<Vec<String>> {
-        let manifest_path = repo.join("revol.toml");
+        let manifest_path = repo.join("revoq.toml");
         if !manifest_path.exists() {
-            return Err(RevolError::NotRevolStandard {
+            return Err(RevoqError::NotRevoqStandard {
                 path: repo.to_path_buf(),
-                reason: "missing revol.toml".to_string(),
+                reason: "missing revoq.toml".to_string(),
             });
         }
         let sub = Manifest::load(repo)?;
@@ -336,18 +336,18 @@ impl Resolver {
         }
     }
 
-    /// Run a git command rooted in `cwd`, mapping failures into RevolError.
+    /// Run a git command rooted in `cwd`, mapping failures into RevoqError.
     fn git(&self, cwd: &Path, args: &[&str]) -> Result<()> {
         let mut cmd = Command::new("git");
         cmd.current_dir(cwd).args(args);
-        let output = cmd.output().map_err(|source| RevolError::CommandSpawn {
+        let output = cmd.output().map_err(|source| RevoqError::CommandSpawn {
             program: "git".to_string(),
             source,
         })?;
         if output.status.success() {
             Ok(())
         } else {
-            Err(RevolError::CommandFailed {
+            Err(RevoqError::CommandFailed {
                 program: format!("git {}", args.join(" ")),
                 code: output.status.code(),
                 stderr: String::from_utf8_lossy(&output.stderr).to_string(),
@@ -361,18 +361,18 @@ impl Resolver {
         }
     }
 
-    /// Refresh `~/.revol/revol-libs` from the registry's flat-text index.
+    /// Refresh `~/.revoq/revoq-libs` from the registry's flat-text index.
     ///
     /// Deliberately shells out to whatever native fetch tool the OS already
     /// has — PowerShell's `Invoke-WebRequest` on Windows, `curl` (falling
     /// back to `wget`) elsewhere — instead of linking an HTTP client crate.
     /// That keeps the dependency tree and compile times exactly as small as
-    /// the rest of revol.
+    /// the rest of revoq.
     pub fn sync_index(&self, quiet: bool) -> Result<()> {
         let url =
-            std::env::var("REVOL_LIBS_URL").unwrap_or_else(|_| REVOL_LIBS_INDEX_URL.to_string());
-        let dest = self.home.join("revol-libs");
-        let tmp = self.home.join("revol-libs.tmp");
+            std::env::var("REVOQ_LIBS_URL").unwrap_or_else(|_| REVOQ_LIBS_INDEX_URL.to_string());
+        let dest = self.home.join("revoq-libs");
+        let tmp = self.home.join("revoq-libs.tmp");
 
         if !quiet {
             println!("\x1b[1;32m    Syncing\x1b[0m package index from {url}");
@@ -395,9 +395,9 @@ impl Resolver {
 }
 
 /// Default location of the flat-text package index. Overridable via
-/// `REVOL_LIBS_URL` for self-hosted or air-gapped registries.
-const REVOL_LIBS_INDEX_URL: &str =
-    "https://raw.githubusercontent.com/xntas/revol/main/website/static/revol-libs";
+/// `REVOQ_LIBS_URL` for self-hosted or air-gapped registries.
+const REVOQ_LIBS_INDEX_URL: &str =
+    "https://raw.githubusercontent.com/xntas/revoq/main/website/static/revoq-libs";
 
 /// Fetch `url` into `dest` using only OS-native tools — no HTTP crate.
 fn fetch_to_file(url: &str, dest: &Path) -> Result<()> {
@@ -417,12 +417,12 @@ fn fetch_with_powershell(url: &str, dest: &Path) -> Result<()> {
     let status = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", ps.as_str()])
         .status()
-        .map_err(|source| RevolError::CommandSpawn {
+        .map_err(|source| RevoqError::CommandSpawn {
             program: "powershell".to_string(),
             source,
         })?;
     if !status.success() {
-        return Err(RevolError::CommandFailed {
+        return Err(RevoqError::CommandFailed {
             program: "powershell".to_string(),
             code: status.code(),
             stderr: format!("Invoke-WebRequest failed for {url}"),
@@ -459,12 +459,12 @@ fn fetch_with_curl_or_wget(url: &str, dest: &Path) -> Result<()> {
     let status = Command::new("wget")
         .args(["--quiet", "--timeout=30", "-O", dest_str.as_str(), url])
         .status()
-        .map_err(|source| RevolError::CommandSpawn {
+        .map_err(|source| RevoqError::CommandSpawn {
             program: "curl/wget".to_string(),
             source,
         })?;
     if !status.success() {
-        return Err(RevolError::CommandFailed {
+        return Err(RevoqError::CommandFailed {
             program: "wget".to_string(),
             code: status.code(),
             stderr: format!("failed to fetch {url}"),
@@ -513,32 +513,32 @@ fn tag_candidates(version: &str) -> Vec<String> {
     out
 }
 
-/// Resolve `~/.revol`, honoring `$REVOL_HOME` then `$HOME`.
+/// Resolve `~/.revoq`, honoring `$REVOQ_HOME` then `$HOME`.
 ///
 /// `pub(crate)` because the global build cache (`hash.rs`) needs the same
-/// resolution rule — there is exactly one definition of "where is revol's
+/// resolution rule — there is exactly one definition of "where is revoq's
 /// home directory" in the codebase.
-pub(crate) fn revol_home() -> Result<PathBuf> {
-    if let Ok(explicit) = std::env::var("REVOL_HOME") {
+pub(crate) fn revoq_home() -> Result<PathBuf> {
+    if let Ok(explicit) = std::env::var("REVOQ_HOME") {
         if !explicit.is_empty() {
             return Ok(PathBuf::from(explicit));
         }
     }
     let home = std::env::var("HOME")
-        .map_err(|_| RevolError::Environment("HOME is not set; cannot locate ~/.revol".into()))?;
+        .map_err(|_| RevoqError::Environment("HOME is not set; cannot locate ~/.revoq".into()))?;
     if home.is_empty() {
-        return Err(RevolError::Environment("HOME is empty".into()));
+        return Err(RevoqError::Environment("HOME is empty".into()));
     }
-    Ok(PathBuf::from(home).join(".revol"))
+    Ok(PathBuf::from(home).join(".revoq"))
 }
 
-/// Parse `~/.revol/revol-libs`.
+/// Parse `~/.revoq/revoq-libs`.
 ///
 /// Format is line-oriented: `shorthand <whitespace> url`, with `#` comments
-/// and blank lines ignored. Missing file is treated as an empty table so revol
+/// and blank lines ignored. Missing file is treated as an empty table so revoq
 /// still works with built-in `gh:` heuristics.
 fn load_mappings(home: &Path) -> Result<BTreeMap<String, String>> {
-    let path = home.join("revol-libs");
+    let path = home.join("revoq-libs");
     let mut map = BTreeMap::new();
     if !path.exists() {
         return Ok(map);
@@ -557,7 +557,7 @@ fn load_mappings(home: &Path) -> Result<BTreeMap<String, String>> {
                 map.insert(k.to_string(), u.to_string());
             }
             _ => {
-                return Err(RevolError::Resolution(format!(
+                return Err(RevoqError::Resolution(format!(
                     "malformed mapping in {} on line {}: '{}'",
                     path.display(),
                     lineno + 1,
@@ -569,19 +569,19 @@ fn load_mappings(home: &Path) -> Result<BTreeMap<String, String>> {
     Ok(map)
 }
 
-/// Run a command and capture stdout as a String, mapping errors to RevolError.
+/// Run a command and capture stdout as a String, mapping errors to RevoqError.
 fn run_capture(program: &str, args: &[&str]) -> Result<String> {
     let output = Command::new(program)
         .args(args)
         .output()
-        .map_err(|source| RevolError::CommandSpawn {
+        .map_err(|source| RevoqError::CommandSpawn {
             program: program.to_string(),
             source,
         })?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
-        Err(RevolError::CommandFailed {
+        Err(RevoqError::CommandFailed {
             program: format!("{program} {}", args.join(" ")),
             code: output.status.code(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
