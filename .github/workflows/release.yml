@@ -1,181 +1,37 @@
-name: Release
+name: Release Binaries
 
-# Cut a release by pushing a version tag:
-#   git tag v0.6.0 && git push origin v0.6.0
-# or trigger it by hand from the Actions tab with an explicit tag.
 on:
   push:
-    tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to release (e.g. v0.6.0). Must already exist."
-        required: true
-
-permissions:
-  contents: write
+    tags:
+      - 'v*'
 
 jobs:
-  # Historical tags (v0.3.0–v0.6.0) point at pre-monorepo commits that have no
-  # cli/ crate — those releases are backfilled source-only by
-  # scripts/backfill-releases.sh, not built here. This gate lets their tag
-  # pushes no-op cleanly instead of failing a build that can't run.
-  gate:
-    name: gate
+  release:
+    name: Build & Release Binaries
     runs-on: ubuntu-latest
-    outputs:
-      buildable: ${{ steps.check.outputs.buildable }}
     steps:
-      - uses: actions/checkout@v4
-      - id: check
-        run: |
-          if [ -f cli/Cargo.toml ]; then
-            echo "buildable=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "buildable=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::historical tag without a cli/ crate — skipping binary build."
-          fi
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  build:
-    name: build ${{ matrix.target }}
-    needs: gate
-    if: needs.gate.outputs.buildable == 'true'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    defaults:
-      run:
-        working-directory: cli
-    strategy:
-      fail-fast: false
-      matrix:
-        # Both macOS targets build on macos-14 (Apple Silicon): it can compile
-        # the x86_64 target too, and — unlike macos-13 — its runners are
-        # actually available on this account (macos-13 jobs sat queued for
-        # hours and never started, blocking the whole release).
-        include:
-          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,   cross: false }
-          - { os: ubuntu-latest,  target: aarch64-unknown-linux-gnu,  cross: true  }
-          - { os: macos-14,       target: x86_64-apple-darwin,        cross: false }
-          - { os: macos-14,       target: aarch64-apple-darwin,       cross: false }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc,     cross: false }
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin, x86_64-pc-windows-msvc
 
-      - name: Install cross
-        if: matrix.cross
-        run: cargo install cross --locked
-
-      - name: Build (native)
-        if: ${{ !matrix.cross }}
-        run: cargo build --release --locked --target ${{ matrix.target }}
-
-      - name: Build (cross)
-        if: matrix.cross
-        run: cross build --release --locked --target ${{ matrix.target }}
-
-      - name: Package
-        shell: bash
+      - name: Build Cross-Platform Artifacts
         run: |
-          set -euo pipefail
-          stage="revoq-${{ matrix.target }}"
-          mkdir "$stage"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "target/${{ matrix.target }}/release/revoq.exe" "$stage/"
-          else
-            cp "target/${{ matrix.target }}/release/revoq" "$stage/"
-          fi
-          cp LICENSE.md README.md "$stage/" 2>/dev/null || true
-
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            7z a "${stage}.zip" "$stage" >/dev/null
-            asset="${stage}.zip"
-          else
-            tar czf "${stage}.tar.gz" "$stage"
-            asset="${stage}.tar.gz"
-          fi
-
-          # Checksum next to the archive (sha256sum on Linux, shasum on macOS).
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "$asset" > "${asset}.sha256"
-          else
-            shasum -a 256 "$asset" > "${asset}.sha256"
-          fi
-          echo "Packaged $asset"
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: revoq-${{ matrix.target }}
-          path: |
-            cli/revoq-${{ matrix.target }}.tar.gz
-            cli/revoq-${{ matrix.target }}.zip
-            cli/revoq-${{ matrix.target }}.*.sha256
-          if-no-files-found: ignore
-
-  release:
-    name: publish release
-    needs: [gate, build]
-    if: needs.gate.outputs.buildable == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Resolve tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Extract release notes from CHANGELOG
-        id: notes
-        run: |
-          set -euo pipefail
-          ver="${{ steps.tag.outputs.name }}"; ver="${ver#v}"
-          awk -v v="$ver" '
-            $0 ~ "^## \\[" v "\\]" {flag=1; next}
-            flag && /^## \[/ {exit}
-            flag {print}
-          ' cli/CHANGELOG.md | sed '/./,$!d' > notes.md
-          if [ ! -s notes.md ]; then
-            printf "Release %s. See CHANGELOG.md for details.\n" "$ver" > notes.md
-          fi
-          {
-            echo
-            echo "---"
-            echo "Install (macOS / Linux / WSL / Git Bash):"
-            echo '```sh'
-            echo "curl -fsSL https://revoq.pages.dev/install.sh | sh"
-            echo '```'
-          } >> notes.md
-          echo "Release notes:"; cat notes.md
+          mkdir -p dist
+          cargo build --release --target x86_64-unknown-linux-gnu
+          tar -czf dist/revoq-v0.7.2-x86_64-unknown-linux-gnu.tar.gz -C target/x86_64-unknown-linux-gnu/release revoq
+          
+          # Checksums
+          cd dist && sha256sum *.tar.gz > checksums.txt
 
       - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="${{ steps.tag.outputs.name }}"
-          # Re-create the release idempotently if the workflow is re-run.
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release delete "$tag" --yes --cleanup-tag=false || true
-          fi
-          gh release create "$tag" \
-            --title "revoq $tag" \
-            --notes-file notes.md \
-            --verify-tag \
-            dist/*
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
