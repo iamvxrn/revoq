@@ -21,3 +21,4 @@ params:
   version: "v0.7.2"
   description: "Cargo-style build system for C and C++ projects featuring deterministic lockfiles and parallel compilation."
   tagline: "Cargo-style build toolchain for C/C++"
+disableKinds: ["taxonomy", "term"]

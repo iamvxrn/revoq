@@ -1,50 +1,51 @@
 {{ define "main" }}
-<div class="docs-wrap">
+<div class="docs-container">
+  <aside class="docs-sidebar">
+    <div class="docs-sidebar__section">
+      <span class="docs-sidebar__label">START</span>
+      <a href="/docs/overview/" class="docs-sidebar__link {{ if eq .RelPermalink "/docs/overview/" }}is-active{{ end }}">Overview</a>
+      <a href="/docs/installation/" class="docs-sidebar__link {{ if eq .RelPermalink "/docs/installation/" }}is-active{{ end }}">Installation</a>
+      <a href="/docs/quickstart/" class="docs-sidebar__link {{ if eq .RelPermalink "/docs/quickstart/" }}is-active{{ end }}">Quickstart</a>
+    </div>
 
-  <!-- Sidebar -->
-  <aside class="docs-sidebar" id="docs-sidebar">
-    <p class="docs-sidebar__title">Documentation</p>
-    <ul class="docs-nav">
-      {{ range .Site.Pages }}
-        {{ if and (eq .Section "docs") (not .IsSection) }}
-          {{ $dir := path.Dir .File.Path }}
-          {{ if eq $dir "docs" }}
-            <li>
-              <a class="docs-nav__link {{ if eq $.RelPermalink .RelPermalink }}active{{ end }}"
-                 href="{{ .RelPermalink }}">{{ .LinkTitle | default .Title }}</a>
-            </li>
-          {{ end }}
-        {{ end }}
-      {{ end }}
+    <div class="docs-sidebar__section">
+      <span class="docs-sidebar__label">CORE</span>
+      <a href="/docs/manifest/" class="docs-sidebar__link {{ if eq .RelPermalink "/docs/manifest/" }}is-active{{ end }}">Manifest Spec</a>
+      <a href="/docs/commands/" class="docs-sidebar__link {{ if eq .RelPermalink "/docs/commands/" }}is-active{{ end }}">CLI Commands</a>
+    </div>
 
-      {{ range .Site.Sections }}
-        {{ if eq .Section "docs" }}
-          {{ range .Sections }}
-            <li class="docs-nav__section">{{ .Title }}</li>
-            {{ range .Pages }}
-              <li>
-                <a class="docs-nav__link {{ if eq $.RelPermalink .RelPermalink }}active{{ end }}"
-                   href="{{ .RelPermalink }}">{{ .LinkTitle | default .Title }}</a>
-              </li>
-            {{ end }}
-          {{ end }}
-        {{ end }}
-      {{ end }}
-    </ul>
+    <div class="docs-sidebar__section">
+      <span class="docs-sidebar__label">REFERENCE</span>
+      <a href="/docs/architecture/" class="docs-sidebar__link {{ if eq .RelPermalink "/docs/architecture/" }}is-active{{ end }}">Architecture</a>
+    </div>
   </aside>
 
-  <!-- Content -->
-  <article class="docs-content">
-    <div class="prose">
+  <main class="docs-main">
+    <article class="prose">
       <h1>{{ .Title }}</h1>
       {{ .Content }}
+    </article>
+
+    <div class="docs-nav-footer">
+      {{ if .Params.prev_title }}
+      <a href="{{ .Params.prev_link }}" class="docs-nav-card docs-nav-card--prev">
+        <span class="docs-nav-card__label">← PREVIOUS LESSON</span>
+        <span class="docs-nav-card__title">{{ .Params.prev_title }}</span>
+      </a>
+      {{ else }}<div></div>{{ end }}
+
+      {{ if .Params.next_title }}
+      <a href="{{ .Params.next_link }}" class="docs-nav-card docs-nav-card--next">
+        <span class="docs-nav-card__label">NEXT LESSON →</span>
+        <span class="docs-nav-card__title">{{ .Params.next_title }}</span>
+      </a>
+      {{ else }}<div></div>{{ end }}
     </div>
-  </article>
+  </main>
 
+  <aside class="docs-toc">
+    <div class="docs-toc__title">ON THIS PAGE</div>
+    {{ .TableOfContents }}
+  </aside>
 </div>
-
-<script>
-  // Docs mobile sidebar toggle — you can wire a button to this if needed
-  document.getElementById('docs-sidebar')?.classList.toggle;
-</script>
 {{ end }}

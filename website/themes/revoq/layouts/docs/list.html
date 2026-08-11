@@ -1,28 +1,62 @@
 {{ define "main" }}
-<div class="docs-wrap">
+<div class="docs-container">
   <aside class="docs-sidebar">
-    <p class="docs-sidebar__title">Documentation</p>
-    <ul class="docs-nav">
-      {{ range .Site.Pages }}
-        {{ if and (eq .Section "docs") (not .IsSection) }}
-          <li>
-            <a class="docs-nav__link {{ if eq $.RelPermalink .RelPermalink }}active{{ end }}"
-               href="{{ .RelPermalink }}">{{ .LinkTitle | default .Title }}</a>
-          </li>
-        {{ end }}
-      {{ end }}
-    </ul>
-  </aside>
-  <article class="docs-content">
-    <div class="prose">
-      <h1>{{ .Title }}</h1>
-      {{ .Content }}
-      <ul>
-        {{ range .Pages }}
-        <li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
-        {{ end }}
-      </ul>
+    <div class="docs-sidebar__section">
+      <span class="docs-sidebar__label">START</span>
+      <a href="/docs/overview/" class="docs-sidebar__link">Overview</a>
+      <a href="/docs/installation/" class="docs-sidebar__link">Installation</a>
+      <a href="/docs/quickstart/" class="docs-sidebar__link">Quickstart</a>
     </div>
-  </article>
+
+    <div class="docs-sidebar__section">
+      <span class="docs-sidebar__label">CORE</span>
+      <a href="/docs/manifest/" class="docs-sidebar__link">Manifest Spec</a>
+      <a href="/docs/commands/" class="docs-sidebar__link">CLI Commands</a>
+    </div>
+
+    <div class="docs-sidebar__section">
+      <span class="docs-sidebar__label">REFERENCE</span>
+      <a href="/docs/architecture/" class="docs-sidebar__link">Architecture</a>
+    </div>
+  </aside>
+
+  <main class="docs-main">
+    <article class="prose">
+      <h1>Revoq Documentation</h1>
+      <p>Welcome to the Revoq build system documentation tracks. Select a lesson to begin:</p>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem;">
+        <a href="/docs/overview/" class="docs-nav-card">
+          <span class="docs-nav-card__label">LESSON 01</span>
+          <span class="docs-nav-card__title">Overview & Philosophy</span>
+        </a>
+        <a href="/docs/installation/" class="docs-nav-card">
+          <span class="docs-nav-card__label">LESSON 02</span>
+          <span class="docs-nav-card__title">Installation Track</span>
+        </a>
+        <a href="/docs/quickstart/" class="docs-nav-card">
+          <span class="docs-nav-card__label">LESSON 03</span>
+          <span class="docs-nav-card__title">5-Minute Quickstart</span>
+        </a>
+        <a href="/docs/manifest/" class="docs-nav-card">
+          <span class="docs-nav-card__label">LESSON 04</span>
+          <span class="docs-nav-card__title">revoq.toml & Spec</span>
+        </a>
+        <a href="/docs/commands/" class="docs-nav-card">
+          <span class="docs-nav-card__label">LESSON 05</span>
+          <span class="docs-nav-card__title">CLI Command Reference</span>
+        </a>
+        <a href="/docs/architecture/" class="docs-nav-card">
+          <span class="docs-nav-card__label">LESSON 06</span>
+          <span class="docs-nav-card__title">Parallel Build Engine</span>
+        </a>
+      </div>
+    </article>
+  </main>
+
+  <aside class="docs-toc">
+    <div class="docs-toc__title">ON THIS PAGE</div>
+    <nav><ul><li><a href="#">Documentation Tracks</a></li></ul></nav>
+  </aside>
 </div>
 {{ end }}
