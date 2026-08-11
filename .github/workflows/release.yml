@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Build & Release Binaries
@@ -21,8 +24,9 @@ jobs:
       - name: Build Cross-Platform Artifacts
         run: |
           mkdir -p dist
+          TAG_NAME="${GITHUB_REF_NAME:-v0.7.2}"
           cargo build --release --target x86_64-unknown-linux-gnu
-          tar -czf dist/revoq-v0.7.2-x86_64-unknown-linux-gnu.tar.gz -C target/x86_64-unknown-linux-gnu/release revoq
+          tar -czf "dist/revoq-${TAG_NAME}-x86_64-unknown-linux-gnu.tar.gz" -C target/x86_64-unknown-linux-gnu/release revoq
           
           # Checksums
           cd dist && sha256sum *.tar.gz > checksums.txt
