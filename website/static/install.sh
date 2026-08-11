@@ -67,7 +67,7 @@ else
   fi
 fi
 
-asset="revoq-${target}.${ext}"
+asset="revoq-${tag}-${target}.${ext}"
 url="https://github.com/$REPO/releases/download/${tag}/${asset}"
 
 say "installing revoq ${tag} (${target})"
@@ -77,7 +77,11 @@ tmp="$(mktemp -d 2>/dev/null || mktemp -d -t revoq)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 say "downloading ${asset}"
-dl "$url" "$tmp/$asset" || die "download failed: $url"
+if ! dl "$url" "$tmp/$asset"; then
+  asset_alt="revoq-${target}.${ext}"
+  url_alt="https://github.com/$REPO/releases/download/${tag}/${asset_alt}"
+  dl "$url_alt" "$tmp/$asset" || die "download failed: $url"
+fi
 
 case "$ext" in
   tar.gz) tar xzf "$tmp/$asset" -C "$tmp" ;;
@@ -90,8 +94,11 @@ case "$ext" in
     ;;
 esac
 
-src="$tmp/revoq-${target}/$binname"
-[ -f "$src" ] || die "archive did not contain the expected binary ($binname)"
+src="$tmp/$binname"
+if [ ! -f "$src" ]; then
+  src="$(find "$tmp" -type f -name "$binname" | head -1 || true)"
+fi
+[ -n "$src" ] && [ -f "$src" ] || die "archive did not contain the expected binary ($binname)"
 
 # --- install ---------------------------------------------------------------
 mkdir -p "$BIN_DIR"
