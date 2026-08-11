@@ -18,19 +18,19 @@
         <span class="terminal-dot"></span>
       </div>
       <div class="terminal-tabs">
-        <button class="terminal-tab is-active" id="tab-lown" onclick="switchInstallTab('lown')">Lown</button>
+        <button class="terminal-tab is-active" id="tab-cargo" onclick="switchInstallTab('cargo')">Cargo</button>
+        <button class="terminal-tab" id="tab-lown" onclick="switchInstallTab('lown')">Lown</button>
         <button class="terminal-tab" id="tab-curl" onclick="switchInstallTab('curl')">Curl</button>
-        <button class="terminal-tab" id="tab-ps" onclick="switchInstallTab('ps')">PowerShell</button>
       </div>
     </div>
     <div class="terminal-body">
       <div class="terminal-cmd">
-        <span class="terminal-prompt">$</span><span id="hero-install-cmd">lown install gh:iamvxrn/revoq</span>
+        <span class="terminal-prompt">$</span><span id="hero-install-cmd">cargo install revoq</span>
       </div>
       <button
         class="copy-btn"
         id="hero-install-copy"
-        data-copy="lown install gh:iamvxrn/revoq"
+        data-copy="cargo install revoq"
         onclick="copyInstallCmd()"
       >
         copy
@@ -44,16 +44,16 @@
 
   <script>
     var installCmds = {
+      cargo: "cargo install revoq",
       lown: "lown install gh:iamvxrn/revoq",
-      curl: "curl -fsSL https://revoq.pages.dev/install.sh | sh",
-      ps: "irm https://revoq.pages.dev/install.ps1 | iex"
+      curl: "curl -fsSL https://revoq.pages.dev/install.sh | sh"
     };
 
     function switchInstallTab(tabKey) {
       document.querySelectorAll('.terminal-tab').forEach(function(b) { b.classList.remove('is-active'); });
       var tabBtn = document.getElementById('tab-' + tabKey);
       if (tabBtn) tabBtn.classList.add('is-active');
-      var cmd = installCmds[tabKey] || installCmds.lown;
+      var cmd = installCmds[tabKey] || installCmds.cargo;
       var span = document.getElementById('hero-install-cmd');
       var btn = document.getElementById('hero-install-copy');
       if (span) span.textContent = cmd;
