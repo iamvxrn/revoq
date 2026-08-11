@@ -56,9 +56,15 @@ if [ "${REVOQ_VERSION:-}" != "" ]; then
   tag="$REVOQ_VERSION"
 else
   say "resolving latest release..."
-  tag="$(fetch "https://api.github.com/repos/$REPO/releases/latest" \
-    | grep '"tag_name"' | head -1 | cut -d'"' -f4)"
-  [ -n "$tag" ] || die "couldn't determine the latest release (set REVOQ_VERSION=vX.Y.Z to pin one)"
+  tag="$(fetch "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+    | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)"
+  if [ -z "$tag" ]; then
+    tag="$(fetch "https://api.github.com/repos/$REPO/releases" 2>/dev/null \
+      | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)"
+  fi
+  if [ -z "$tag" ]; then
+    tag="v0.7.2"
+  fi
 fi
 
 asset="revoq-${target}.${ext}"
