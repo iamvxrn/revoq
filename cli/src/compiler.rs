@@ -20,8 +20,21 @@ pub enum Language {
 }
 
 impl Language {
-    /// The clang driver to invoke for this language.
+    /// Driver executable candidates for this language (Clang primary, GCC/CC legacy fallback).
+    pub fn driver_candidates(self) -> &'static [&'static str] {
+        match self {
+            Language::C => &["clang", "gcc", "cc"],
+            Language::Cpp => &["clang++", "g++", "c++"],
+        }
+    }
+
+    /// The compiler driver to invoke for this language (auto-detects clang -> gcc -> cc).
     pub fn driver(self) -> &'static str {
+        for &candidate in self.driver_candidates() {
+            if std::process::Command::new(candidate).arg("--version").output().is_ok() {
+                return candidate;
+            }
+        }
         match self {
             Language::C => "clang",
             Language::Cpp => "clang++",
