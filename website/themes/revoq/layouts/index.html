@@ -79,7 +79,7 @@
 <!-- Interactive CLI Showcase -->
 <section class="section-wrapper" id="showcase">
   <p class="section-label">Build Engine Interface</p>
-  <h2 class="section-heading">Interactive Command Showcase</h2>
+  <h2 class="section-heading">Commands in Action</h2>
 
   <div class="showcase-box">
     <div class="showcase-tabs">
@@ -90,15 +90,15 @@
     </div>
     <div class="showcase-body">
       <div id="sc-build" class="showcase-content is-active">
-        <pre><code style="color: #4a7bc0;">[revoq] Resolving dependencies from revoq.lock...</code>
-<code style="color: #4a7bc0;">[revoq] Scanning translation units in src/... (8 units found)</code>
-<code>[clang] Compiling src/main.cpp -> target/release/main.o
+        <pre><span style="color: #4a7bc0;">[revoq] Resolving dependencies from revoq.lock...</span>
+<span style="color: #4a7bc0;">[revoq] Scanning translation units in src/... (8 units found)</span>
+[clang] Compiling src/main.cpp -> target/release/main.o
 [clang] Compiling src/engine.cpp -> target/release/engine.o
-<span style="color: #4ade80;">[revoq] Linking target/release/app (Finished in 0.42s)</span></code></pre>
+<span style="color: #4ade80;">[revoq] Linking target/release/app (Finished in 0.42s)</span></pre>
       </div>
       <div id="sc-completions" class="showcase-content">
-        <pre><code style="color: var(--subtle);"># Generated via clap_complete for Zsh:</code>
-<code>#compdef revoq
+        <pre># Generated via clap_complete for Zsh:
+#compdef revoq
 _revoq() {
     local -a commands
     commands=(
@@ -110,22 +110,22 @@ _revoq() {
     )
     _describe 'command' commands
 }
-_revoq "$@"</code></pre>
+_revoq "$@"</pre>
       </div>
       <div id="sc-doctor" class="showcase-content">
-        <pre><code>{
+        <pre>{
   "version": "0.8.0",
   "clang_found": true,
   "clang_version": "18.1.3",
   "ar_found": true,
   "status": "healthy"
-}</code></pre>
+}</pre>
       </div>
       <div id="sc-vendor" class="showcase-content">
-        <pre><code style="color: #4a7bc0;">[revoq] Vendoring 3 dependencies into third_party/...</code>
-<code style="color: #4ade80;">[ok] Vendored libcurl (commit 4b0a328) -> third_party/libcurl</code>
-<code style="color: #4ade80;">[ok] Vendored fmtlib (commit c7b90d4) -> third_party/fmtlib</code>
-<code>[ok] All dependencies vendored. Subsequent builds are 100% hermetic & offline.</code></pre>
+        <pre><span style="color: #4a7bc0;">[revoq] Vendoring 3 dependencies into third_party/...</span>
+<span style="color: #4ade80;">[ok] Vendored libcurl (commit 4b0a328) -> third_party/libcurl</span>
+<span style="color: #4ade80;">[ok] Vendored fmtlib (commit c7b90d4) -> third_party/fmtlib</span>
+[ok] All dependencies vendored. Subsequent builds are 100% hermetic & offline.</pre>
       </div>
     </div>
   </div>
@@ -141,97 +141,41 @@ _revoq "$@"</code></pre>
   </script>
 </section>
 
-<!-- System Architecture Grid -->
+<!-- Human-Centric Feature Cards -->
 <section class="section-wrapper">
-  <p class="section-label">Compiler Specifications</p>
-  <h2 class="section-heading">Core Build Engine Architecture</h2>
+  <p class="section-label">Why Revoq</p>
+  <h2 class="section-heading">Cargo-like developer experience for C and C++</h2>
 
-  <div class="features__grid">
-    <div class="feature-card">
-      <div class="feature-card__number">01</div>
-      <div class="feature-card__title">Strict Entry Point Layout</div>
-      <div class="feature-card__body">
-        Deterministic layout rules: <code>src/main.cpp</code> or <code>src/main.c</code> for binaries, <code>src/lib.cpp</code> for libraries. Zero complex Makefile boilerplates.
+  <div class="human-grid">
+    <div class="human-card">
+      <div class="human-card__tag">Conventions</div>
+      <div class="human-card__title">Zero CMake Boilerplate</div>
+      <div class="human-card__body">
+        Convention over configuration. Put your entry point in <code>src/main.cpp</code> or <code>src/lib.cpp</code> and run <code>revoq build</code>.
       </div>
     </div>
 
-    <div class="feature-card">
-      <div class="feature-card__number">02</div>
-      <div class="feature-card__title">Reproducible Dependency Graph</div>
-      <div class="feature-card__body">
-        <code>revoq.lock</code> pins exact Git commit SHAs and source hashes for bit-for-bit reproducible C/C++ compilation.
+    <div class="human-card">
+      <div class="human-card__tag">Reproducibility</div>
+      <div class="human-card__title">Exact Lockfile Resolution</div>
+      <div class="human-card__body">
+        <code>revoq.lock</code> pins exact Git commit SHAs across all project dependencies for bit-for-bit reproducible builds.
       </div>
     </div>
 
-    <div class="feature-card">
-      <div class="feature-card__number">03</div>
-      <div class="feature-card__title">Parallel Work Queue</div>
-      <div class="feature-card__body">
-        Worker pool parallelizes Clang compilation jobs across all CPU cores with streaming diagnostic outputs.
+    <div class="human-card">
+      <div class="human-card__tag">Performance</div>
+      <div class="human-card__title">Parallel Clang Engine</div>
+      <div class="human-card__body">
+        Multi-threaded worker pool compiles C/C++ translation units in parallel across CPU cores with instant diagnostic output.
       </div>
     </div>
 
-    <div class="feature-card">
-      <div class="feature-card__number">04</div>
-      <div class="feature-card__title">Hermetic Vendoring Support</div>
-      <div class="feature-card__body">
-        <code>revoq vendor</code> copies third-party code into <code>third_party/</code>, allowing offline builds without network access.
-      </div>
-    </div>
-
-    <div class="feature-card">
-      <div class="feature-card__number">05</div>
-      <div class="feature-card__title">Deep Clang Integration</div>
-      <div class="feature-card__body">
-        Auto-detects Clang toolchains, headers, sanitizers (ASan, TSan, UBSan), and generates `compile_commands.json` for clangd.
-      </div>
-    </div>
-
-    <div class="feature-card">
-      <div class="feature-card__number">06</div>
-      <div class="feature-card__title">Agent-Native JSON API</div>
-      <div class="feature-card__body">
-        Built-in <code>--json</code> diagnostic reports allow AI agents to parse compilation failures and dependency trees programmatically.
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Workflow Steps -->
-<section class="section-wrapper">
-  <p class="section-label">Compilation Pipeline</p>
-  <h2 class="section-heading">How Revoq Compiles C/C++</h2>
-
-  <div class="workflow-grid">
-    <div class="workflow-card">
-      <div class="workflow-card__step">Step 01</div>
-      <div class="workflow-card__title">Manifest Scan</div>
-      <div class="workflow-card__desc">
-        Parses <code>revoq.toml</code>, identifies target language (C or C++), features, and dependency specifications.
-      </div>
-    </div>
-
-    <div class="workflow-card">
-      <div class="workflow-card__step">Step 02</div>
-      <div class="workflow-card__title">Graph Lock</div>
-      <div class="workflow-card__desc">
-        Resolves dependency commits, writes <code>revoq.lock</code>, and sets up header search paths.
-      </div>
-    </div>
-
-    <div class="workflow-card">
-      <div class="workflow-card__step">Step 03</div>
-      <div class="workflow-card__title">Parallel Compile</div>
-      <div class="workflow-card__desc">
-        Compiles translation units in parallel via Clang, outputting object files to <code>target/</code>.
-      </div>
-    </div>
-
-    <div class="workflow-card">
-      <div class="workflow-card__step">Step 04</div>
-      <div class="workflow-card__title">Hermetic Link</div>
-      <div class="workflow-card__desc">
-        Links object files into final executable binaries or static/dynamic archives.
+    <div class="human-card">
+      <div class="human-card__tag">Hermetic Builds</div>
+      <div class="human-card__title">Offline Vendoring</div>
+      <div class="human-card__body">
+        <code>revoq vendor</code> freezes all third-party dependencies into <code>third_party/</code> for reproducible offline compilation.
       </div>
     </div>
   </div>
@@ -239,7 +183,7 @@ _revoq "$@"</code></pre>
 
 <!-- Comparison Matrix -->
 <section class="section-wrapper" id="comparison">
-  <p class="section-label">Feature Matrix</p>
+  <p class="section-label">Comparison</p>
   <h2 class="section-heading">Revoq vs Legacy C/C++ Build Systems</h2>
 
   <div class="comparison-table-wrapper">
@@ -249,8 +193,7 @@ _revoq "$@"</code></pre>
           <th>Feature</th>
           <th>Revoq</th>
           <th>CMake</th>
-          <th>Make / Makefile</th>
-          <th>Bazel</th>
+          <th>Make</th>
         </tr>
       </thead>
       <tbody>
@@ -259,82 +202,27 @@ _revoq "$@"</code></pre>
           <td><span class="badge-yes">✓ Native Cargo UX</span></td>
           <td><span class="badge-no">✗ Complex Syntax</span></td>
           <td><span class="badge-no">✗ Manual Rules</span></td>
-          <td><span class="badge-no">✗ Complex Starlark</span></td>
         </tr>
         <tr>
           <td>Deterministic Dependency Lockfile</td>
           <td><span class="badge-yes">✓ revoq.lock</span></td>
           <td><span class="badge-no">✗ External tools</span></td>
           <td><span class="badge-no">✗ No lockfile</span></td>
-          <td><span class="badge-yes">✓ Bazel Lock</span></td>
         </tr>
         <tr>
           <td>Single Executable Engine</td>
           <td><span class="badge-yes">✓ Standalone Rust</span></td>
           <td>Needs Ninja/Make</td>
           <td><span class="badge-yes">✓ Standalone C</span></td>
-          <td><span class="badge-no">✗ Heavy JVM runtime</span></td>
-        </tr>
-        <tr>
-          <td>Machine-Readable Agent JSON</td>
-          <td><span class="badge-yes">✓ Native --json</span></td>
-          <td><span class="badge-no">✗ Unstructured logs</span></td>
-          <td><span class="badge-no">✗ Plain text logs</span></td>
-          <td>JSON Event Protocol</td>
         </tr>
         <tr>
           <td>Hermetic Offline Vendoring</td>
           <td><span class="badge-yes">✓ revoq vendor</span></td>
           <td><span class="badge-no">✗ Manual FetchContent</span></td>
           <td><span class="badge-no">✗ Manual submodules</span></td>
-          <td>Vendor rules</td>
         </tr>
       </tbody>
     </table>
-  </div>
-</section>
-
-<!-- FAQ Accordion -->
-<section class="section-wrapper">
-  <p class="section-label">Frequently Asked Questions</p>
-  <h2 class="section-heading">Revoq Build System FAQ</h2>
-
-  <div class="faq-list">
-    <div class="faq-item">
-      <details>
-        <summary>Why use Revoq instead of CMake?</summary>
-        <div class="faq-item__answer">
-          CMake requires writing hundreds of lines of complex DSL files. Revoq brings the simplicity of Rust's Cargo to C/C++, with zero build scripts required for standard project layouts.
-        </div>
-      </details>
-    </div>
-
-    <div class="faq-item">
-      <details>
-        <summary>Which C/C++ compilers are supported?</summary>
-        <div class="faq-item__answer">
-          Revoq deeply integrates with <code>clang</code> and <code>clang++</code> for optimal performance, sanitizers, and diagnostic outputs. It auto-discovers Clang toolchains installed on Linux, macOS, and Windows.
-        </div>
-      </details>
-    </div>
-
-    <div class="faq-item">
-      <details>
-        <summary>How does Revoq handle Language Server Protocol (LSP)?</summary>
-        <div class="faq-item__answer">
-          Revoq automatically generates <code>compile_commands.json</code> during build runs, providing instant, zero-configuration autocomplete and navigation for <code>clangd</code> in VS Code, Neovim, and CLion.
-        </div>
-      </details>
-    </div>
-
-    <div class="faq-item">
-      <details>
-        <summary>Can I vendor dependencies for offline builds?</summary>
-        <div class="faq-item__answer">
-          Yes! Executing <code>revoq vendor</code> downloads and copies all locked dependencies into a local <code>third_party/</code> directory. Subsequent builds will compile entirely from local files without requiring network access.
-        </div>
-      </details>
-    </div>
   </div>
 </section>
 
