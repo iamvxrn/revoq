@@ -1,6 +1,6 @@
 [package]
 name = "revoq"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2021"
 authors = ["revoq contributors", "Claude"]
 description = """A modern package manager and build system for C and C++, with strict
