@@ -1,13 +1,13 @@
 {{ define "main" }}
 
 <section class="hero">
-  <span class="hero__eyebrow">revoq {{ .Site.Params.version | default "v0.7.2" }} — build system for C/C++</span>
+  <span class="hero__eyebrow">revoq {{ .Site.Params.version | default "v0.8.0" }} — build system for C/C++</span>
   <h1 class="hero__title">
     Cargo-style build system <br>
     <span class="hero__title-highlight">for C and C++ projects</span>
   </h1>
   <p class="hero__sub">
-    Revoq compiles C and C++ projects with deterministic dependency locking, strict entry point conventions, and parallel work queues.
+    Revoq compiles C and C++ projects with deterministic dependency locking, strict entry point conventions, parallel work queues, and deep Clang integration.
   </p>
 
   <div class="terminal-box">
@@ -18,19 +18,20 @@
         <span class="terminal-dot"></span>
       </div>
       <div class="terminal-tabs">
-        <button class="terminal-tab is-active" id="tab-cargo" onclick="switchInstallTab('cargo')">Cargo</button>
-        <button class="terminal-tab" id="tab-lown" onclick="switchInstallTab('lown')">Lown</button>
-        <button class="terminal-tab" id="tab-curl" onclick="switchInstallTab('curl')">Curl</button>
+        <button class="terminal-tab is-active" id="tab-curl" onclick="switchInstallTab('curl')">curl | sh</button>
+        <button class="terminal-tab" id="tab-lown" onclick="switchInstallTab('lown')">lown</button>
+        <button class="terminal-tab" id="tab-cargo" onclick="switchInstallTab('cargo')">cargo</button>
+        <button class="terminal-tab" id="tab-git" onclick="switchInstallTab('git')">git</button>
       </div>
     </div>
     <div class="terminal-body">
       <div class="terminal-cmd">
-        <span class="terminal-prompt">$</span><span id="hero-install-cmd">cargo install revoq</span>
+        <span class="terminal-prompt">$</span><span id="hero-install-cmd">curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh</span>
       </div>
       <button
         class="copy-btn"
         id="hero-install-copy"
-        data-copy="cargo install revoq"
+        data-copy="curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh"
         onclick="copyInstallCmd()"
       >
         copy
@@ -38,22 +39,25 @@
     </div>
   </div>
 
-  <div>
+  <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
     <a href="/docs/" class="hero-footer-link">Documentation & Spec →</a>
+    <a href="#showcase" class="hero-footer-link" style="color: var(--subtle);">Interactive Terminal ↓</a>
+    <a href="#comparison" class="hero-footer-link" style="color: var(--subtle);">Feature Matrix ↓</a>
   </div>
 
   <script>
     var installCmds = {
-      cargo: "cargo install revoq",
+      curl: "curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh",
       lown: "lown install gh:iamvxrn/revoq",
-      curl: "curl -fsSL https://revoq.pages.dev/install.sh | sh"
+      cargo: "cargo install revoq",
+      git: "git clone https://github.com/iamvxrn/revoq.git && cd revoq && cargo build --manifest-path cli/Cargo.toml --release"
     };
 
     function switchInstallTab(tabKey) {
       document.querySelectorAll('.terminal-tab').forEach(function(b) { b.classList.remove('is-active'); });
       var tabBtn = document.getElementById('tab-' + tabKey);
       if (tabBtn) tabBtn.classList.add('is-active');
-      var cmd = installCmds[tabKey] || installCmds.cargo;
+      var cmd = installCmds[tabKey] || installCmds.curl;
       var span = document.getElementById('hero-install-cmd');
       var btn = document.getElementById('hero-install-copy');
       if (span) span.textContent = cmd;
@@ -72,29 +76,266 @@
   </script>
 </section>
 
-<section class="features" id="features">
-  <p class="section-label">System Architecture</p>
-  <h2 class="section-heading">Build System Specifications</h2>
+<!-- Interactive CLI Showcase -->
+<section class="section-wrapper" id="showcase">
+  <p class="section-label">Build Engine Interface</p>
+  <h2 class="section-heading">Interactive Command Showcase</h2>
+
+  <div class="showcase-box">
+    <div class="showcase-tabs">
+      <button class="showcase-tab is-active" onclick="switchShowcaseTab('sc-build', this)">$ revoq build --release</button>
+      <button class="showcase-tab" onclick="switchShowcaseTab('sc-completions', this)">$ revoq completions zsh</button>
+      <button class="showcase-tab" onclick="switchShowcaseTab('sc-doctor', this)">$ revoq doctor --json</button>
+      <button class="showcase-tab" onclick="switchShowcaseTab('sc-vendor', this)">$ revoq vendor</button>
+    </div>
+    <div class="showcase-body">
+      <div id="sc-build" class="showcase-content is-active">
+        <pre><code style="color: #4a7bc0;">[revoq] Resolving dependencies from revoq.lock...</code>
+<code style="color: #4a7bc0;">[revoq] Scanning translation units in src/... (8 units found)</code>
+<code>[clang] Compiling src/main.cpp -> target/release/main.o
+[clang] Compiling src/engine.cpp -> target/release/engine.o
+<span style="color: #4ade80;">[revoq] Linking target/release/app (Finished in 0.42s)</span></code></pre>
+      </div>
+      <div id="sc-completions" class="showcase-content">
+        <pre><code style="color: var(--subtle);"># Generated via clap_complete for Zsh:</code>
+<code>#compdef revoq
+_revoq() {
+    local -a commands
+    commands=(
+        'build:Compile current package and dependencies'
+        'run:Build and execute target executable'
+        'init:Create new revoq package layout'
+        'doctor:Diagnose toolchain (clang, ar, headers)'
+        'completions:Generate shell completion scripts'
+    )
+    _describe 'command' commands
+}
+_revoq "$@"</code></pre>
+      </div>
+      <div id="sc-doctor" class="showcase-content">
+        <pre><code>{
+  "version": "0.8.0",
+  "clang_found": true,
+  "clang_version": "18.1.3",
+  "ar_found": true,
+  "status": "healthy"
+}</code></pre>
+      </div>
+      <div id="sc-vendor" class="showcase-content">
+        <pre><code style="color: #4a7bc0;">[revoq] Vendoring 3 dependencies into third_party/...</code>
+<code style="color: #4ade80;">[ok] Vendored libcurl (commit 4b0a328) -> third_party/libcurl</code>
+<code style="color: #4ade80;">[ok] Vendored fmtlib (commit c7b90d4) -> third_party/fmtlib</code>
+<code>[ok] All dependencies vendored. Subsequent builds are 100% hermetic & offline.</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function switchShowcaseTab(contentId, btn) {
+      document.querySelectorAll('.showcase-tab').forEach(function(t) { t.classList.remove('is-active'); });
+      document.querySelectorAll('.showcase-content').forEach(function(c) { c.classList.remove('is-active'); });
+      btn.classList.add('is-active');
+      var target = document.getElementById(contentId);
+      if (target) target.classList.add('is-active');
+    }
+  </script>
+</section>
+
+<!-- System Architecture Grid -->
+<section class="section-wrapper">
+  <p class="section-label">Compiler Specifications</p>
+  <h2 class="section-heading">Core Build Engine Architecture</h2>
 
   <div class="features__grid">
     <div class="feature-card">
       <div class="feature-card__number">01</div>
-      <div class="feature-card__title">Strict Project Layout</div>
-      <div class="feature-card__body">Entry points are deterministic: <code>src/main.cpp</code> / <code>src/main.c</code> for binaries or <code>src/lib.cpp</code> / <code>src/lib.c</code> for libraries. Unresolved entries halt compilation.</div>
+      <div class="feature-card__title">Strict Entry Point Layout</div>
+      <div class="feature-card__body">
+        Deterministic layout rules: <code>src/main.cpp</code> or <code>src/main.c</code> for binaries, <code>src/lib.cpp</code> for libraries. Zero complex Makefile boilerplates.
+      </div>
     </div>
 
     <div class="feature-card">
       <div class="feature-card__number">02</div>
       <div class="feature-card__title">Reproducible Dependency Graph</div>
-      <div class="feature-card__body"><code>revoq.lock</code> pins dependencies to exact Git commit SHAs via atomic file swaps. <code>revoq build</code> strictly honors locked states.</div>
+      <div class="feature-card__body">
+        <code>revoq.lock</code> pins exact Git commit SHAs and source hashes for bit-for-bit reproducible C/C++ compilation.
+      </div>
     </div>
 
     <div class="feature-card">
       <div class="feature-card__number">03</div>
       <div class="feature-card__title">Parallel Work Queue</div>
-      <div class="feature-card__body">A multi-threaded worker queue compiles translation units in parallel across available CPU cores, streaming diagnostic outputs as units finish.</div>
+      <div class="feature-card__body">
+        Worker pool parallelizes Clang compilation jobs across all CPU cores with streaming diagnostic outputs.
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-card__number">04</div>
+      <div class="feature-card__title">Hermetic Vendoring Support</div>
+      <div class="feature-card__body">
+        <code>revoq vendor</code> copies third-party code into <code>third_party/</code>, allowing offline builds without network access.
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-card__number">05</div>
+      <div class="feature-card__title">Deep Clang Integration</div>
+      <div class="feature-card__body">
+        Auto-detects Clang toolchains, headers, sanitizers (ASan, TSan, UBSan), and generates `compile_commands.json` for clangd.
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-card__number">06</div>
+      <div class="feature-card__title">Agent-Native JSON API</div>
+      <div class="feature-card__body">
+        Built-in <code>--json</code> diagnostic reports allow AI agents to parse compilation failures and dependency trees programmatically.
+      </div>
     </div>
   </div>
 </section>
 
-{{ .Content }} {{ end }}
+<!-- Workflow Steps -->
+<section class="section-wrapper">
+  <p class="section-label">Compilation Pipeline</p>
+  <h2 class="section-heading">How Revoq Compiles C/C++</h2>
+
+  <div class="workflow-grid">
+    <div class="workflow-card">
+      <div class="workflow-card__step">Step 01</div>
+      <div class="workflow-card__title">Manifest Scan</div>
+      <div class="workflow-card__desc">
+        Parses <code>revoq.toml</code>, identifies target language (C or C++), features, and dependency specifications.
+      </div>
+    </div>
+
+    <div class="workflow-card">
+      <div class="workflow-card__step">Step 02</div>
+      <div class="workflow-card__title">Graph Lock</div>
+      <div class="workflow-card__desc">
+        Resolves dependency commits, writes <code>revoq.lock</code>, and sets up header search paths.
+      </div>
+    </div>
+
+    <div class="workflow-card">
+      <div class="workflow-card__step">Step 03</div>
+      <div class="workflow-card__title">Parallel Compile</div>
+      <div class="workflow-card__desc">
+        Compiles translation units in parallel via Clang, outputting object files to <code>target/</code>.
+      </div>
+    </div>
+
+    <div class="workflow-card">
+      <div class="workflow-card__step">Step 04</div>
+      <div class="workflow-card__title">Hermetic Link</div>
+      <div class="workflow-card__desc">
+        Links object files into final executable binaries or static/dynamic archives.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison Matrix -->
+<section class="section-wrapper" id="comparison">
+  <p class="section-label">Feature Matrix</p>
+  <h2 class="section-heading">Revoq vs Legacy C/C++ Build Systems</h2>
+
+  <div class="comparison-table-wrapper">
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Revoq</th>
+          <th>CMake</th>
+          <th>Make / Makefile</th>
+          <th>Bazel</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Cargo-Style UX (`revoq build/run`)</td>
+          <td><span class="badge-yes">✓ Native Cargo UX</span></td>
+          <td><span class="badge-no">✗ Complex Syntax</span></td>
+          <td><span class="badge-no">✗ Manual Rules</span></td>
+          <td><span class="badge-no">✗ Complex Starlark</span></td>
+        </tr>
+        <tr>
+          <td>Deterministic Dependency Lockfile</td>
+          <td><span class="badge-yes">✓ revoq.lock</span></td>
+          <td><span class="badge-no">✗ External tools</span></td>
+          <td><span class="badge-no">✗ No lockfile</span></td>
+          <td><span class="badge-yes">✓ Bazel Lock</span></td>
+        </tr>
+        <tr>
+          <td>Single Executable Engine</td>
+          <td><span class="badge-yes">✓ Standalone Rust</span></td>
+          <td>Needs Ninja/Make</td>
+          <td><span class="badge-yes">✓ Standalone C</span></td>
+          <td><span class="badge-no">✗ Heavy JVM runtime</span></td>
+        </tr>
+        <tr>
+          <td>Machine-Readable Agent JSON</td>
+          <td><span class="badge-yes">✓ Native --json</span></td>
+          <td><span class="badge-no">✗ Unstructured logs</span></td>
+          <td><span class="badge-no">✗ Plain text logs</span></td>
+          <td>JSON Event Protocol</td>
+        </tr>
+        <tr>
+          <td>Hermetic Offline Vendoring</td>
+          <td><span class="badge-yes">✓ revoq vendor</span></td>
+          <td><span class="badge-no">✗ Manual FetchContent</span></td>
+          <td><span class="badge-no">✗ Manual submodules</span></td>
+          <td>Vendor rules</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- FAQ Accordion -->
+<section class="section-wrapper">
+  <p class="section-label">Frequently Asked Questions</p>
+  <h2 class="section-heading">Revoq Build System FAQ</h2>
+
+  <div class="faq-list">
+    <div class="faq-item">
+      <details>
+        <summary>Why use Revoq instead of CMake?</summary>
+        <div class="faq-item__answer">
+          CMake requires writing hundreds of lines of complex DSL files. Revoq brings the simplicity of Rust's Cargo to C/C++, with zero build scripts required for standard project layouts.
+        </div>
+      </details>
+    </div>
+
+    <div class="faq-item">
+      <details>
+        <summary>Which C/C++ compilers are supported?</summary>
+        <div class="faq-item__answer">
+          Revoq deeply integrates with <code>clang</code> and <code>clang++</code> for optimal performance, sanitizers, and diagnostic outputs. It auto-discovers Clang toolchains installed on Linux, macOS, and Windows.
+        </div>
+      </details>
+    </div>
+
+    <div class="faq-item">
+      <details>
+        <summary>How does Revoq handle Language Server Protocol (LSP)?</summary>
+        <div class="faq-item__answer">
+          Revoq automatically generates <code>compile_commands.json</code> during build runs, providing instant, zero-configuration autocomplete and navigation for <code>clangd</code> in VS Code, Neovim, and CLion.
+        </div>
+      </details>
+    </div>
+
+    <div class="faq-item">
+      <details>
+        <summary>Can I vendor dependencies for offline builds?</summary>
+        <div class="faq-item__answer">
+          Yes! Executing <code>revoq vendor</code> downloads and copies all locked dependencies into a local <code>third_party/</code> directory. Subsequent builds will compile entirely from local files without requiring network access.
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+{{ end }}
