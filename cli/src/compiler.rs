@@ -20,11 +20,11 @@ pub enum Language {
 }
 
 impl Language {
-    /// Driver executable candidates for this language (Clang primary, GCC/CC legacy fallback).
+    /// Driver executable candidates for this language (Clang primary, GCC, TCC, Zig CC fallback).
     pub fn driver_candidates(self) -> &'static [&'static str] {
         match self {
-            Language::C => &["clang", "gcc", "cc"],
-            Language::Cpp => &["clang++", "g++", "c++"],
+            Language::C => &["clang", "gcc", "tcc", "zig cc", "cc"],
+            Language::Cpp => &["clang++", "g++", "zig c++", "c++"],
         }
     }
 
