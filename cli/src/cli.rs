@@ -80,6 +80,17 @@ pub enum Command {
     /// Run Clang's static analyzer over the package's sources without
     /// compiling to an object file or invoking the linker.
     Check(CheckArgs),
+
+    /// Generate shell completion scripts for the specified shell.
+    Completions(CompletionsArgs),
+}
+
+/// Arguments for `completions`.
+#[derive(clap::Args, Debug, Clone)]
+pub struct CompletionsArgs {
+    /// Target shell for auto-completion generation (bash, zsh, fish, powershell, elvish).
+    #[arg(value_enum)]
+    pub shell: clap_complete::Shell,
 }
 
 /// Arguments shared by `build` and (transitively) `run`.

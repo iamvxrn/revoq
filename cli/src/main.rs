@@ -46,6 +46,12 @@ fn main() {
         Cmd::Migrate(args) => migrate::run(&args, quiet),
         Cmd::Vendor(args) => cmd_vendor(args, verbose, quiet),
         Cmd::Check(args) => cmd_check(args, verbose, quiet),
+        Cmd::Completions(args) => {
+            use clap::CommandFactory;
+            let mut cmd = Cli::command();
+            clap_complete::generate(args.shell, &mut cmd, "revoq", &mut std::io::stdout());
+            Ok(())
+        }
     };
 
     if let Err(err) = result {

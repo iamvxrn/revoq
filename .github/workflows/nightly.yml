@@ -17,3 +17,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Run Test Suite
         run: cargo test --manifest-path cli/Cargo.toml
+      - name: Build Binary
+        run: cargo build --manifest-path cli/Cargo.toml
+      - name: Run E2E CLI Diagnostics
+        run: |
+          cargo run --manifest-path cli/Cargo.toml -- doctor --json
+          cargo run --manifest-path cli/Cargo.toml -- completions zsh
