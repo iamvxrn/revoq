@@ -635,13 +635,148 @@ pre {
   .docs-sidebar { display: none; }
 }
 
-/* ── Landing Page Extensions ────────────────────────────────────── */
-.section-wrapper {
+/* ── Bespoke Landing Page Layout ──────────────────────────────────── */
+.landing {
   max-width: var(--max-w);
   margin: 0 auto;
-  padding: 4rem 1.5rem 0;
-  border-top: 1px solid var(--border);
+  padding: 0 1.5rem 4rem;
 }
+
+.hero {
+  padding: clamp(3rem, 6vw, 4.5rem) 0 2rem;
+  text-align: center;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.hero__badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: rgba(74, 123, 192, 0.08);
+  border: 1px solid rgba(74, 123, 192, 0.2);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 1.25rem;
+}
+
+.hero__title {
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--heading);
+  line-height: 1.15;
+  margin-bottom: 1rem;
+}
+
+.hero__sub {
+  font-size: 1.1rem;
+  color: var(--subtle);
+  max-width: 640px;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+}
+
+/* Installer Bar */
+.install-bar {
+  margin-top: 2rem;
+  background: #090909;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  max-width: 650px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.install-bar__prompt {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.install-bar__cmd {
+  color: var(--body);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* Feature Spotlight Grid */
+.features-section {
+  margin-top: 4.5rem;
+}
+
+.section-title {
+  font-size: clamp(1.4rem, 3vw, 1.8rem);
+  font-weight: 700;
+  color: var(--heading);
+  letter-spacing: -0.02em;
+  margin-bottom: 2rem;
+}
+
+.spotlight-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 800px) {
+  .spotlight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.spotlight-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.spotlight-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.75rem 2rem;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.spotlight-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.main-spotlight {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(74, 123, 192, 0.05) 0%, var(--surface) 100%);
+  border-color: rgba(74, 123, 192, 0.25);
+}
+
+.spotlight-card__title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--heading);
+  margin-bottom: 0.75rem;
+}
+
+.spotlight-card__body {
+  font-size: 0.95rem;
+  color: var(--subtle);
+  line-height: 1.6;
+}
+
+/* Comparison Section */
+.comparison-section {
+  margin-top: 4.5rem;
+}
+
 
 /* Interactive Showcase */
 .showcase-box {
