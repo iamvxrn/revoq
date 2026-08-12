@@ -1,16 +1,88 @@
 {{ define "main" }}
 
 <div class="landing">
-  <!-- Hero Section -->
+  <!-- Original Hero Section Restored -->
   <section class="hero">
-    <div class="hero__badge">revoq {{ .Site.Params.version | default "v0.8.0" }}</div>
-    <h1 class="hero__title">Cargo-style build system<br>for C and C++</h1>
+    <span class="hero__eyebrow">revoq {{ .Site.Params.version | default "v0.8.0" }} — build system for C/C++</span>
+    <h1 class="hero__title">
+      Cargo-style build system <br>
+      <span class="hero__title-highlight">for C and C++ projects</span>
+    </h1>
     <p class="hero__sub">
-      Deterministic dependency locking, strict entry points, and parallel Clang compilation.
+      Revoq compiles C and C++ projects with deterministic dependency locking, strict entry point conventions, parallel work queues, and deep Clang integration.
     </p>
 
-    <!-- Terminal Showcase directly in Hero -->
-    <div class="showcase-box" id="showcase">
+    <div class="terminal-box">
+      <div class="terminal-header">
+        <div class="terminal-dots">
+          <span class="terminal-dot"></span>
+          <span class="terminal-dot"></span>
+          <span class="terminal-dot"></span>
+        </div>
+        <div class="terminal-tabs">
+          <button class="terminal-tab is-active" id="tab-curl" onclick="switchInstallTab('curl')">curl | sh</button>
+          <button class="terminal-tab" id="tab-lown" onclick="switchInstallTab('lown')">lown</button>
+          <button class="terminal-tab" id="tab-cargo" onclick="switchInstallTab('cargo')">cargo</button>
+          <button class="terminal-tab" id="tab-git" onclick="switchInstallTab('git')">git</button>
+        </div>
+      </div>
+      <div class="terminal-body">
+        <div class="terminal-cmd">
+          <span class="terminal-prompt">$</span><span id="hero-install-cmd">curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh</span>
+        </div>
+        <button
+          class="copy-btn"
+          id="hero-install-copy"
+          data-copy="curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh"
+          onclick="copyInstallCmd()"
+        >
+          copy
+        </button>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+      <a href="/docs/" class="hero-footer-link">Documentation & Spec →</a>
+      <a href="#showcase" class="hero-footer-link" style="color: var(--subtle);">Interactive Terminal ↓</a>
+      <a href="#comparison" class="hero-footer-link" style="color: var(--subtle);">Feature Matrix ↓</a>
+    </div>
+
+    <script>
+      var installCmds = {
+        curl: "curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh",
+        lown: "lown install gh:iamvxrn/revoq",
+        cargo: "cargo install revoq",
+        git: "git clone https://github.com/iamvxrn/revoq.git && cd revoq && cargo build --manifest-path cli/Cargo.toml --release"
+      };
+
+      function switchInstallTab(tabKey) {
+        document.querySelectorAll('.terminal-tab').forEach(function(b) { b.classList.remove('is-active'); });
+        var tabBtn = document.getElementById('tab-' + tabKey);
+        if (tabBtn) tabBtn.classList.add('is-active');
+        var cmd = installCmds[tabKey] || installCmds.curl;
+        var span = document.getElementById('hero-install-cmd');
+        var btn = document.getElementById('hero-install-copy');
+        if (span) span.textContent = cmd;
+        if (btn) btn.setAttribute('data-copy', cmd);
+      }
+
+      function copyInstallCmd() {
+        var btn = document.getElementById('hero-install-copy');
+        var cmd = btn.getAttribute('data-copy');
+        navigator.clipboard.writeText(cmd).then(function() {
+          var oldText = btn.textContent;
+          btn.textContent = 'copied!';
+          setTimeout(function() { btn.textContent = oldText; }, 1500);
+        });
+      }
+    </script>
+  </section>
+
+  <!-- Interactive CLI Showcase -->
+  <section class="features-section" id="showcase" style="margin-top: 3.5rem;">
+    <h2 class="section-title">Commands in action</h2>
+
+    <div class="showcase-box">
       <div class="showcase-tabs">
         <button class="showcase-tab is-active" onclick="switchShowcaseTab('sc-build', this)">$ revoq build --release</button>
         <button class="showcase-tab" onclick="switchShowcaseTab('sc-completions', this)">$ revoq completions zsh</button>
@@ -58,16 +130,9 @@ _revoq "$@"</pre>
         </div>
       </div>
     </div>
-
-    <!-- Installer Command Line -->
-    <div class="install-bar">
-      <span class="install-bar__prompt">$</span>
-      <span class="install-bar__cmd" id="hero-install-cmd">curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh</span>
-      <button class="copy-btn" id="hero-install-copy" data-copy="curl -fsSL https://raw.githubusercontent.com/iamvxrn/revoq/main/install.sh | sh" onclick="copyInstallCmd()">copy</button>
-    </div>
   </section>
 
-  <!-- Features Section: Asymmetric Spotlight -->
+  <!-- Features Section: Asymmetric Spotlight Grid -->
   <section class="features-section">
     <h2 class="section-title">Designed for modern C/C++ workflows</h2>
     
@@ -103,7 +168,7 @@ _revoq "$@"</pre>
   </section>
 
   <!-- Comparison Section -->
-  <section class="comparison-section">
+  <section class="comparison-section" id="comparison">
     <h2 class="section-title">How Revoq compares to traditional build tools</h2>
 
     <div class="comparison-table-wrapper">
@@ -154,16 +219,6 @@ _revoq "$@"</pre>
     btn.classList.add('is-active');
     var target = document.getElementById(contentId);
     if (target) target.classList.add('is-active');
-  }
-
-  function copyInstallCmd() {
-    var btn = document.getElementById('hero-install-copy');
-    var cmd = btn.getAttribute('data-copy');
-    navigator.clipboard.writeText(cmd).then(function() {
-      var oldText = btn.textContent;
-      btn.textContent = 'copied!';
-      setTimeout(function() { btn.textContent = oldText; }, 1500);
-    });
   }
 </script>
 
