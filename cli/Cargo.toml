@@ -1,8 +1,8 @@
 [package]
 name = "revoq"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
-authors = ["revoq contributors", "Claude"]
+authors = ["revoq contributors", "Antigravity AI Agent"]
 description = """A modern package manager and build system for C and C++, with strict
 project-layout enforcement and deep Clang integration."""
 license = "MIT"
