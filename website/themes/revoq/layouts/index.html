@@ -1,7 +1,7 @@
 {{ define "main" }}
 
 <div class="landing">
-  <!-- Original Hero Section Restored -->
+  <!-- Original Hero Section -->
   <section class="hero">
     <span class="hero__eyebrow">revoq {{ .Site.Params.version | default "v0.8.0" }} — build system for C/C++</span>
     <h1 class="hero__title">
@@ -167,7 +167,7 @@ _revoq "$@"</pre>
     </div>
   </section>
 
-  <!-- Comparison Section -->
+  <!-- Expanded Comparison Section -->
   <section class="comparison-section" id="comparison">
     <h2 class="section-title">How Revoq compares to traditional build tools</h2>
 
@@ -179,6 +179,7 @@ _revoq "$@"</pre>
             <th>Revoq</th>
             <th>CMake</th>
             <th>Make</th>
+            <th>Meson</th>
           </tr>
         </thead>
         <tbody>
@@ -187,24 +188,42 @@ _revoq "$@"</pre>
             <td><span class="badge-yes">✓ Native Cargo UX</span></td>
             <td><span class="badge-no">✗ Complex Syntax</span></td>
             <td><span class="badge-no">✗ Manual Rules</span></td>
+            <td><span class="badge-yes">✓ Meson build</span></td>
           </tr>
           <tr>
-            <td>Deterministic Dependency Lockfile</td>
-            <td><span class="badge-yes">✓ revoq.lock</span></td>
+            <td>Zero Build Script Boilerplate</td>
+            <td><span class="badge-yes">✓ Zero config (src/main.cpp)</span></td>
+            <td><span class="badge-no">✗ CMakeLists.txt required</span></td>
+            <td><span class="badge-no">✗ Makefile required</span></td>
+            <td><span class="badge-no">✗ meson.build required</span></td>
+          </tr>
+          <tr>
+            <td>Deterministic Git Lockfile</td>
+            <td><span class="badge-yes">✓ Native revoq.lock</span></td>
             <td><span class="badge-no">✗ External tools</span></td>
             <td><span class="badge-no">✗ No lockfile</span></td>
+            <td><span class="badge-no">✗ Wrap files (no lock)</span></td>
           </tr>
           <tr>
-            <td>Single Executable Engine</td>
-            <td><span class="badge-yes">✓ Standalone Rust</span></td>
-            <td>Needs Ninja/Make</td>
-            <td><span class="badge-yes">✓ Standalone C</span></td>
+            <td>Parallel Clang Worker Engine</td>
+            <td><span class="badge-yes">✓ Built-in worker pool</span></td>
+            <td>Needs Ninja / make -j</td>
+            <td>Needs make -j</td>
+            <td>Needs Ninja</td>
           </tr>
           <tr>
             <td>Hermetic Offline Vendoring</td>
             <td><span class="badge-yes">✓ revoq vendor</span></td>
             <td><span class="badge-no">✗ Manual FetchContent</span></td>
             <td><span class="badge-no">✗ Manual submodules</span></td>
+            <td><span class="badge-yes">✓ Wrap subprojects</span></td>
+          </tr>
+          <tr>
+            <td>Automatic `compile_commands.json`</td>
+            <td><span class="badge-yes">✓ Auto Clang Database</span></td>
+            <td>Requires flag toggle</td>
+            <td><span class="badge-no">✗ Needs bear/compiledb</span></td>
+            <td><span class="badge-yes">✓ Auto generated</span></td>
           </tr>
         </tbody>
       </table>
