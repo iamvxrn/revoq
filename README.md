@@ -1,31 +1,49 @@
 # Revoq
 
-###### Cargo, but for C and C++ — an experiment in what AI can build.
+> **Revoq** is a modern package manager and build engine for C and C++, featuring strict project-layout enforcement, Clang compilation database generation, `-ftime-trace` flamegraphs, and single-flag sanitizer injection.
 
+[![Rust](https://img.shields.io/badge/rust-stable-4a7bc0.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-4a7bc0.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-passing-4a7bc0.svg)](#)
+[![Nightly CI](https://github.com/iamvxrn/revoq/actions/workflows/nightly.yml/badge.svg)](https://github.com/iamvxrn/revoq/actions/workflows/nightly.yml)
 
-Revoq is a build toolchain for C and C++ that feels like Cargo. Point it at a directory with `src/main.cpp` or `src/lib.cpp`, run `revoq build`, and it compiles — no `CMakeLists.txt`, no Makefiles, no setup script.
-
-> **Note:** Revoq was created as an experimental study in C/C++ tooling: if you pointed an AI at "Cargo, but for C and C++," see how far it gets. The build system, dependency graph resolution, and documentation were generated under maintainer guidance.
-
-## Quick Installation
-
-Via **Lown**:
-```bash
-lown install gh:iamvxrn/revoq
+```
+                       src/ & include/ (Strict Layout)
+                                      │
+                              [ Revoq Engine ]
+                                      │
+                     ┌────────────────┴────────────────┐
+                     ▼                                 ▼
+             Binary Executable             compile_commands.json
 ```
 
-Via **Curl**:
+## Quick Start
+
+Install Revoq with Cargo or Lown:
 ```bash
-curl -fsSL https://revoq.pages.dev/install.sh | sh
+cargo install revoq
+# or
+lown install revoq
+```
+
+Initialize a new C++ project:
+```bash
+revoq new my_project --lang cpp
+cd my_project
+revoq build
+revoq run
 ```
 
 ## Features
 
-- **Strict Project Layout**: Entry points are deterministic (`src/main.cpp`, `src/lib.cpp`).
-- **Reproducible Dependency Graph**: `revoq.lock` pins dependencies to exact Git commit SHAs via atomic file swaps.
-- **Parallel Compilation Queue**: Multi-threaded worker queue compiles translation units in parallel.
+- **Zero CMake Boilerplate**: Enforces a strict project layout (`src/`, `include/`) with zero configuration files needed for basic builds.
+- **Clang Integration**: Generates `compile_commands.json` automatically for Neovim/VSCode language servers.
+- **Flamegraph Profiling**: Single-flag `-ftime-trace` profile output to inspect C++ template instantiation speeds.
+- **Single-Flag Sanitizers**: `revoq build --sanitizer address,undefined` for instant ASan/UBsan injection.
+- **Agent-Native `--json` Flags**: Machine-readable outputs across all build, check, doctor, and vendor commands.
+
+## Documentation
+
+Full guides and C/C++ build tracks: https://revoq.pages.dev
 
 ## License
 
