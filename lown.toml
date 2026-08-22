@@ -1,0 +1,9 @@
+[package]
+name = "revoq"
+version = "0.7.2"
+language = "rust"
+executable = "revoq"
+
+[scripts]
+install = "install.sh"
+uninstall = "uninstall.sh"
